@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkwell — Roleplay Forum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --void:#0c0f16;
+    --panel:#151b28;
+    --panel-raised:#1c2434;
+    --line:#2a3345;
+    --gold:#c9a227;
+    --gold-bright:#e6c568;
+    --parchment:#ece3d0;
+    --ink:#2a2118;
+    --muted:#8891a7;
+    --danger:#b3453b;
+    --success:#5c8a5c;
+    --display: 'Cormorant Garamond', serif;
+    --body: 'Inter', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse at top left, #171f30 0%, var(--void) 55%),
+      var(--void);
+    color:var(--parchment);
+    font-family:var(--body);
+    min-height:100vh;
+  }
+  a{color:inherit;}
+  button{font-family:var(--body);cursor:pointer;}
+  ::selection{background:var(--gold);color:var(--ink);}
+  :focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px;}
+
+  /* ---------- layout shell ---------- */
+  #app{display:none;min-height:100vh;grid-template-rows:auto 1fr;}
+  #app.visible{display:grid;}
+
+  header.topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 24px;
+    background:linear-gradient(180deg, #12182600, transparent), var(--panel);
+    border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:20;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .quill{font-size:22px;}
+  .brand h1{
+    font-family:var(--display);font-weight:700;font-size:26px;
+    letter-spacing:0.5px;margin:0;color:var(--gold-bright);
+  }
+  .topbar-right{display:flex;align-items:center;gap:14px;}
+
+  .seal{
+    display:flex;align-items:center;gap:8px;
+    background:radial-gradient(circle at 30% 30%, #d9b64a, #a8801e 70%);
+    color:#221a06;
+    padding:6px 14px 6px 10px;
+    border-radius:999px;
+    font-family:var(--mono);font-weight:500;font-size:14px;
+    box-shadow: inset 0 0 0 2px #7c5f12, 0 2px 6px rgba(0,0,0,.4);
+  }
+  .seal .coin-icon{font-size:16px;}
+
+  .username-pill{
+    font-family:var(--mono);font-size:13px;color:var(--muted);
+    display:flex;align-items:center;gap:6px;
+  }
+  .username-pill b{color:var(--parchment);font-weight:500;}
+
+  .btn{
+    border:1px solid var(--line);background:var(--panel-raised);color:var(--parchment);
+    padding:8px 16px;border-radius:6px;font-size:14px;font-weight:500;
+    transition:border-color .15s, background .15s;
+  }
+  .btn:hover{border-color:var(--gold);}
+  .btn-gold{
+    background:linear-gradient(180deg, var(--gold-bright), var(--gold));
+    color:var(--ink);border:none;font-weight:600;
+  }
+  .btn-gold:hover{filter:brightness(1.08);}
+  .btn-ghost{background:transparent;border:1px solid var(--line);}
+  .btn-danger{border-color:var(--danger);color:#e2a39c;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+
+  main.layout{
+    display:grid;grid-template-columns:240px 1fr;gap:0;
+    min-height:0;
+  }
+  nav.sidebar{
+    border-right:1px solid var(--line);
+    padding:20px 14px;
+    background:linear-gradient(180deg, #10151f, var(--void));
+  }
+  nav.sidebar h2{
+    font-family:var(--mono);font-size:11px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--muted);margin:0 0 10px 6px;
+  }
+  .board-link{
+    display:block;width:100%;text-align:left;background:none;border:none;
+    color:var(--parchment);padding:9px 10px;border-radius:6px;font-size:14.5px;
+    margin-bottom:2px;
+  }
+  .board-link:hover{background:var(--panel-raised);}
+  .board-link.active{background:var(--panel-raised);color:var(--gold-bright);box-shadow:inset 2px 0 0 var(--gold);}
+  .sidebar-divider{height:1px;background:var(--line);margin:16px 0;}
+  .sidebar-nav-btn{
+    display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+    background:none;border:none;color:var(--muted);padding:9px 10px;border-radius:6px;font-size:14px;
+  }
+  .sidebar-nav-btn:hover{background:var(--panel-raised);color:var(--parchment);}
+  .sidebar-nav-btn.active{color:var(--gold-bright);}
+
+  section.content{padding:28px 32px;max-width:920px;}
+
+  /* ---------- auth screen ---------- */
+  #auth-screen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    padding:24px;
+  }
+  .letter{
+    width:100%;max-width:400px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:36px 32px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+    position:relative;
+  }
+  .letter::before{
+    content:'';position:absolute;top:-14px;right:-14px;width:44px;height:44px;
+    background:radial-gradient(circle at 35% 35%, #d9b64a, #8a6a17 75%);
+    border-radius:50%;box-shadow:0 4px 10px rgba(0,0,0,.5);
+  }
+  .letter h1{font-family:var(--display);font-size:30px;color:var(--gold-bright);margin:0 0 4px;}
+  .letter p.tagline{color:var(--muted);font-size:13.5px;margin:0 0 24px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;font-family:var(--mono);}
+  .field input{
+    width:100%;padding:10px 12px;background:var(--void);border:1px solid var(--line);
+    border-radius:6px;color:var(--parchment);font-size:14px;
+  }
+  .field input:focus-visible{border-color:var(--gold);}
+  .auth-toggle{
+    text-align:center;margin-top:16px;font-size:13.5px;color:var(--muted);
+  }
+  .auth-toggle button{background:none;border:none;color:var(--gold-bright);font-size:13.5px;padding:0;}
+  .auth-msg{font-size:13px;padding:10px 12px;border-radius:6px;margin-bottom:14px;display:none;}
+  .auth-msg.error{display:block;background:rgba(179,69,59,.15);color:#e2a39c;border:1px solid rgba(179,69,59,.3);}
+  .auth-msg.success{display:block;background:rgba(92,138,92,.15);color:#a8cba8;border:1px solid rgba(92,138,92,.3);}
+
+  /* ---------- boards / threads ---------- */
+  .page-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;}
+  .page-header h2{font-family:var(--display);font-size:28px;color:var(--gold-bright);margin:0;}
+  .page-header .desc{color:var(--muted);font-size:14px;margin-top:4px;}
+
+  .board-card{
+    display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:16px 18px;margin-bottom:10px;
+  }
+  .board-card:hover{border-color:var(--gold);}
+  .board-card h3{font-family:var(--display);font-size:20px;margin:0 0 4px;color:var(--parchment);}
+  .board-card p{color:var(--muted);font-size:13.5px;margin:0;}
+
+  .thread-row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:14px 16px;margin-bottom:8px;
+  }
+  .thread-row:hover{border-color:var(--gold);}
+  .thread-main{display:flex;align-items:center;gap:10px;min-width:0;}
+  .thread-title{font-family:var(--display);font-size:18px;color:var(--parchment);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pin-badge{font-size:12px;color:var(--gold-bright);flex-shrink:0;}
+  .thread-meta{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
+
+  /* ---------- posts ---------- */
+  .back-link{background:none;border:none;color:var(--muted);font-size:13px;margin-bottom:14px;padding:0;}
+  .back-link:hover{color:var(--gold-bright);}
+  .post-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:16px 18px;margin-bottom:12px;
+  }
+  .post-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .post-author{font-weight:600;color:var(--gold-bright);font-size:14.5px;}
+  .post-time{font-family:var(--mono);font-size:11.5px;color:var(--muted);}
+  .post-body{font-size:14.5px;line-height:1.65;white-space:pre-wrap;color:var(--parchment);}
+
+  textarea, .composer textarea{
+    width:100%;min-height:110px;padding:12px;background:var(--void);
+    border:1px solid var(--line);border-radius:6px;color:var(--parchment);
+    font-family:var(--body);font-size:14px;resize:vertical;
+  }
+  textarea:focus-visible{border-color:var(--gold);}
+  .composer{margin-top:20px;}
+  .composer-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;}
+  .hint{font-size:12px;color:var(--muted);}
+
+  /* ---------- store ---------- */
+  .store-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+  .item-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .item-icon{font-size:30px;}
+  .item-name{font-family:var(--display);font-size:19px;color:var(--parchment);}
+  .item-desc{font-size:13px;color:var(--muted);flex-grow:1;}
+  .item-price{font-family:var(--mono);color:var(--gold-bright);font-size:14px;}
+
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(6,8,13,.7);display:none;
+    align-items:center;justify-content:center;z-index:50;padding:20px;
+  }
+  .modal-backdrop.visible{display:flex;}
+  .modal{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:26px;width:100%;max-width:480px;
+  }
+  .modal h3{font-family:var(--display);font-size:22px;color:var(--gold-bright);margin:0 0 16px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+
+  .empty-state{color:var(--muted);font-size:14px;padding:30px 0;text-align:center;}
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--panel-raised);border:1px solid var(--gold);color:var(--parchment);
+    padding:10px 18px;border-radius:8px;font-size:13.5px;z-index:100;
+    opacity:0;pointer-events:none;transition:opacity .25s;
+  }
+  .toast.visible{opacity:1;}
+
+  .admin-block{border-top:1px solid var(--line);margin-top:28px;padding-top:20px;}
+  .admin-block h3{font-family:var(--display);font-size:20px;color:var(--gold-bright);margin:0 0 12px;}
+  .inline-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .inline-form input{flex:1;min-width:120px;padding:8px 10px;background:var(--void);
+    border:1px solid var(--line);border-radius:6px;color:var(--parchment);font-size:13.5px;}
+
+  @media (max-width:720px){
+    main.layout{grid-template-columns:1fr;}
+    nav.sidebar{
+      border-right:none;border-bottom:1px solid var(--line);
+      display:flex;overflow-x:auto;gap:4px;padding:12px 14px;
+    }
+    nav.sidebar h2, .sidebar-divider{display:none;}
+    .board-link, .sidebar-nav-btn{white-space:nowrap;}
+    section.content{padding:20px;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= AUTH SCREEN ================= -->
+<div id="auth-screen">
+  <div class="letter">
+    <h1>Inkwell</h1>
+    <p class="tagline">A place to write your story. Earn coin for every post.</p>
+
+    <div id="auth-msg" class="auth-msg"></div>
+
+    <form id="login-form">
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-gold" style="width:100%;">Enter Inkwell</button>
+    </form>
+
+    <form id="signup-form" style="display:none;">
+      <div class="field">
+        <label for="signup-username">Username</label>
+        <input type="text" id="signup-username" required minlength="2" maxlength="24">
+      </div>
+      <div class="field">
+        <label for="signup-email">Email</label>
+        <input type="email" id="signup-email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="signup-password">Password</label>
+        <input type="password" id="signup-password" required minlength="6" autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-gold" style="width:100%;">Create Account</button>
+    </form>
+
+    <div class="auth-toggle">
+      <span id="toggle-to-signup-wrap">New here? <button type="button" id="toggle-to-signup">Create an account</button></span>
+      <span id="toggle-to-login-wrap" style="display:none;">Already have an account? <button type="button" id="toggle-to-login">Log in</button></span>
+    </div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="quill">🪶</span><h1>Inkwell</h1></div>
+    <div class="topbar-right">
+      <div class="seal"><span class="coin-icon">🪙</span><span id="currency-display">0</span></div>
+      <div class="username-pill">signed in as <b id="username-display">—</b></div>
+      <button class="btn btn-ghost" id="logout-btn">Log out</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <nav class="sidebar">
+      <h2>Boards</h2>
+      <div id="board-list"></div>
+      <div class="sidebar-divider"></div>
+      <button class="sidebar-nav-btn" data-nav="store">🏺 Market</button>
+      <button class="sidebar-nav-btn" data-nav="inventory">🎒 Inventory</button>
+    </nav>
+
+    <section class="content" id="content">
+      <!-- injected views render here -->
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- New thread modal -->
+<div class="modal-backdrop" id="new-thread-backdrop">
+  <div class="modal">
+    <h3>Start a new thread</h3>
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="new-thread-title" maxlength="120">
+    </div>
+    <div class="field">
+      <label>Opening post</label>
+      <textarea id="new-thread-content" placeholder="Write the opening post..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="new-thread-cancel">Cancel</button>
+      <button class="btn btn-gold" id="new-thread-submit">Post Thread</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — replace with your own Supabase project values
+   ============================================================ */
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let currentUser = null;      // auth user
+let currentProfile = null;   // profiles row
+let boards = [];
+let currentBoardId = null;
+let currentThreadId = null;
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function $(sel){ return document.querySelector(sel); }
+function $all(sel){ return document.querySelectorAll(sel); }
+function esc(str){
+  const d = document.createElement('div');
+  d.textContent = str ?? '';
+  return d.innerHTML;
+}
+function timeAgo(iso){
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+function showToast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  setTimeout(() => t.classList.remove('visible'), 2400);
+}
+function setContent(html){
+  $('#content').innerHTML = html;
+}
+
+/* ============================================================
+   AUTH SCREEN WIRING
+   ============================================================ */
+$('#toggle-to-signup').addEventListener('click', () => {
+  $('#login-form').style.display = 'none';
+  $('#signup-form').style.display = 'block';
+  $('#toggle-to-signup-wrap').style.display = 'none';
+  $('#toggle-to-login-wrap').style.display = 'block';
+  hideAuthMsg();
+});
+$('#toggle-to-login').addEventListener('click', () => {
+  $('#signup-form').style.display = 'none';
+  $('#login-form').style.display = 'block';
+  $('#toggle-to-login-wrap').style.display = 'none';
+  $('#toggle-to-signup-wrap').style.display = 'block';
+  hideAuthMsg();
+});
+function hideAuthMsg(){
+  const el = $('#auth-msg');
+  el.className = 'auth-msg';
+  el.textContent = '';
+}
+function authMsg(type, msg){
+  const el = $('#auth-msg');
+  el.className = 'auth-msg ' + type;
+  el.textContent = msg;
+}
+
+$('#login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideAuthMsg();
+  const email = $('#login-email').value.trim();
+  const password = $('#login-password').value;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) authMsg('error', error.message);
+});
+
+$('#signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideAuthMsg();
+  const username = $('#signup-username').value.trim();
+  const email = $('#signup-email').value.trim();
+  const password = $('#signup-password').value;
+  const { error } = await supabase.auth.signUp({
+    email, password,
+    options: { data: { username } }
+  });
+  if (error) { authMsg('error', error.message); return; }
+  authMsg('success', 'Account created! Check your email if confirmation is required, then log in.');
+});
+
+$('#logout-btn').addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+/* ============================================================
+   SESSION HANDLING
+   ============================================================ */
+supabase.auth.onAuthStateChange(async (_event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    await loadProfile();
+    await loadBoards();
+    $('#auth-screen').style.display = 'none';
+    $('#app').classList.add('visible');
+    showBoardList();
+  } else {
+    currentUser = null;
+    currentProfile = null;
+    $('#app').classList.remove('visible');
+    $('#auth-screen').style.display = 'flex';
+  }
+});
+
+async function loadProfile(){
+  const { data, error } = await supabase
+    .from('profiles').select('*').eq('id', currentUser.id).single();
+  if (error) { console.error(error); return; }
+  currentProfile = data;
+  $('#username-display').textContent = data.username;
+  $('#currency-display').textContent = data.currency;
+}
+
+async function refreshCurrency(){
+  const { data } = await supabase
+    .from('profiles').select('currency').eq('id', currentUser.id).single();
+  if (data) {
+    currentProfile.currency = data.currency;
+    $('#currency-display').textContent = data.currency;
+  }
+}
+
+/* ============================================================
+   BOARDS
+   ============================================================ */
+async function loadBoards(){
+  const { data, error } = await supabase
+    .from('boards').select('*').order('sort_order', { ascending: true });
+  if (error) { console.error(error); return; }
+  boards = data;
+  renderBoardSidebar();
+}
+
+function renderBoardSidebar(){
+  const list = $('#board-list');
+  list.innerHTML = boards.map(b =>
+    `<button class="board-link" data-board="${b.id}">${esc(b.name)}</button>`
+  ).join('');
+  $all('.board-link').forEach(btn => {
+    btn.addEventListener('click', () => showThreadList(Number(btn.dataset.board)));
+  });
+  $all('.sidebar-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.nav === 'store') showStore();
+      if (btn.dataset.nav === 'inventory') showInventory();
+    });
+  });
+}
+
+function setActiveSidebar({ boardId=null, nav=null }){
+  $all('.board-link').forEach(b => b.classList.toggle('active', Number(b.dataset.board) === boardId));
+  $all('.sidebar-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === nav));
+}
+
+function showBoardList(){
+  currentBoardId = null;
+  setActiveSidebar({});
+  setContent(`
+    <div class="page-header">
+      <div><h2>Boards</h2><div class="desc">Pick a board to see what's happening.</div></div>
+    </div>
+    <div id="boards-container"></div>
+    ${currentProfile?.is_admin ? adminBoardsBlock() : ''}
+  `);
+  const container = $('#boards-container');
+  if (!boards.length){
+    container.innerHTML = `<div class="empty-state">No boards yet.</div>`;
+  } else {
+    container.innerHTML = boards.map(b => `
+      <button class="board-card" data-board="${b.id}">
+        <h3>${esc(b.name)}</h3>
+        <p>${esc(b.description || '')}</p>
+      </button>
+    `).join('');
+    $all('.board-card').forEach(btn => {
+      btn.addEventListener('click', () => showThreadList(Number(btn.dataset.board)));
+    });
+  }
+  if (currentProfile?.is_admin) wireAdminBoards();
+}
+
+function adminBoardsBlock(){
+  return `
+    <div class="admin-block">
+      <h3>Add a board (admin)</h3>
+      <div class="inline-form">
+        <input type="text" id="admin-board-name" placeholder="Board name">
+        <input type="text" id="admin-board-desc" placeholder="Description">
+        <button class="btn btn-gold" id="admin-board-submit">Add</button>
+      </div>
+    </div>
+  `;
+}
+function wireAdminBoards(){
+  const btn = $('#admin-board-submit');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const name = $('#admin-board-name').value.trim();
+    const description = $('#admin-board-desc').value.trim();
+    if (!name) return;
+    const { error } = await supabase.from('boards').insert({ name, description, sort_order: boards.length });
+    if (error) { showToast(error.message); return; }
+    await loadBoards();
+    showBoardList();
+    showToast('Board added.');
+  });
+}
+
+/* ============================================================
+   THREADS
+   ============================================================ */
+async function showThreadList(boardId){
+  currentBoardId = boardId;
+  setActiveSidebar({ boardId });
+  const board = boards.find(b => b.id === boardId);
+  setContent(`
+    <button class="back-link" id="back-to-boards">← All boards</button>
+    <div class="page-header">
+      <div><h2>${esc(board?.name || '')}</h2><div class="desc">${esc(board?.description || '')}</div></div>
+      <button class="btn btn-gold" id="open-new-thread">+ New Thread</button>
+    </div>
+    <div id="threads-container"></div>
+  `);
+  $('#back-to-boards').addEventListener('click', showBoardList);
+  $('#open-new-thread').addEventListener('click', openNewThreadModal);
+
+  const { data, error } = await supabase
+    .from('threads')
+    .select('id, title, pinned, created_at, profiles(username)')
+    .eq('board_id', boardId)
+    .order('pinned', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  const container = $('#threads-container');
+  if (error) { container.innerHTML = `<div class="empty-state">Couldn't load threads.</div>`; console.error(error); return; }
+  if (!data.length){
+    container.innerHTML = `<div class="empty-state">No threads yet — be the first to write one.</div>`;
+    return;
+  }
+  container.innerHTML = data.map(t => `
+    <button class="thread-row" data-thread="${t.id}">
+      <div class="thread-main">
+        ${t.pinned ? '<span class="pin-badge">📌</span>' : ''}
+        <span class="thread-title">${esc(t.title)}</span>
+      </div>
+      <span class="thread-meta">by ${esc(t.profiles?.username || 'unknown')} · ${timeAgo(t.created_at)}</span>
+    </button>
+  `).join('');
+  $all('.thread-row').forEach(row => {
+    row.addEventListener('click', () => showThread(row.dataset.thread));
+  });
+}
+
+function openNewThreadModal(){
+  $('#new-thread-title').value = '';
+  $('#new-thread-content').value = '';
+  $('#new-thread-backdrop').classList.add('visible');
+}
+$('#new-thread-cancel').addEventListener('click', () => {
+  $('#new-thread-backdrop').classList.remove('visible');
+});
+$('#new-thread-submit').addEventListener('click', async () => {
+  const title = $('#new-thread-title').value.trim();
+  const content = $('#new-thread-content').value.trim();
+  if (!title || !content){ showToast('Title and opening post are both required.'); return; }
+
+  const { data: thread, error: threadErr } = await supabase
+    .from('threads')
+    .insert({ board_id: currentBoardId, title, author_id: currentUser.id })
+    .select().single();
+  if (threadErr){ showToast(threadErr.message); return; }
+
+  const { error: postErr } = await supabase
+    .from('posts')
+    .insert({ thread_id: thread.id, author_id: currentUser.id, content });
+  if (postErr){ showToast(postErr.message); return; }
+
+  $('#new-thread-backdrop').classList.remove('visible');
+  await refreshCurrency();
+  showThread(thread.id);
+});
+
+/* ============================================================
+   THREAD VIEW / POSTS
+   ============================================================ */
+async function showThread(threadId){
+  currentThreadId = threadId;
+  setContent(`
+    <button class="back-link" id="back-to-threads">← Back to threads</button>
+    <div id="thread-header" class="page-header"></div>
+    <div id="posts-container"></div>
+    <div class="composer">
+      <label class="hint" for="reply-box">Reply to this thread</label>
+      <textarea id="reply-box" placeholder="Write your reply..."></textarea>
+      <div class="composer-foot">
+        <span class="hint">Posts under 15 characters don't earn coin.</span>
+        <button class="btn btn-gold" id="reply-submit">Post Reply</button>
+      </div>
+    </div>
+  `);
+  $('#back-to-threads').addEventListener('click', () => showThreadList(currentBoardId));
+
+  const { data: thread } = await supabase
+    .from('threads').select('title, locked').eq('id', threadId).single();
+  $('#thread-header').innerHTML = `<h2>${esc(thread?.title || '')}</h2>`;
+
+  await loadPosts(threadId);
+
+  $('#reply-submit').addEventListener('click', async () => {
+    const content = $('#reply-box').value.trim();
+    if (!content){ showToast('Write something first.'); return; }
+    const { error } = await supabase
+      .from('posts').insert({ thread_id: threadId, author_id: currentUser.id, content });
+    if (error){ showToast(error.message); return; }
+    $('#reply-box').value = '';
+    await refreshCurrency();
+    await loadPosts(threadId);
+  });
+}
+
+async function loadPosts(threadId){
+  const { data, error } = await supabase
+    .from('posts')
+    .select('id, content, created_at, profiles(username)')
+    .eq('thread_id', threadId)
+    .order('created_at', { ascending: true });
+
+  const container = $('#posts-container');
+  if (error){ container.innerHTML = `<div class="empty-state">Couldn't load posts.</div>`; return; }
+  container.innerHTML = data.map(p => `
+    <div class="post-card">
+      <div class="post-head">
+        <span class="post-author">${esc(p.profiles?.username || 'unknown')}</span>
+        <span class="post-time">${timeAgo(p.created_at)}</span>
+      </div>
+      <div class="post-body">${esc(p.content)}</div>
+    </div>
+  `).join('');
+}
+
+/* ============================================================
+   STORE
+   ============================================================ */
+async function showStore(){
+  currentBoardId = null;
+  setActiveSidebar({ nav: 'store' });
+  setContent(`
+    <div class="page-header">
+      <div><h2>Market</h2><div class="desc">Spend coin you've earned from posting.</div></div>
+    </div>
+    <div id="store-grid" class="store-grid"></div>
+    ${currentProfile?.is_admin ? adminStoreBlock() : ''}
+  `);
+
+  const { data, error } = await supabase
+    .from('store_items').select('*').eq('active', true).order('price', { ascending: true });
+  const grid = $('#store-grid');
+  if (error){ grid.innerHTML = `<div class="empty-state">Couldn't load the market.</div>`; return; }
+  if (!data.length){ grid.innerHTML = `<div class="empty-state">The market is empty right now.</div>`; }
+  else {
+    grid.innerHTML = data.map(item => `
+      <div class="item-card">
+        <span class="item-icon">${esc(item.icon || '🪙')}</span>
+        <span class="item-name">${esc(item.name)}</span>
+        <span class="item-desc">${esc(item.description || '')}</span>
+        <span class="item-price">${item.price} 🪙</span>
+        <button class="btn btn-gold" data-buy="${item.id}">Buy</button>
+      </div>
+    `).join('');
+    $all('[data-buy]').forEach(btn => {
+      btn.addEventListener('click', () => buyItem(Number(btn.dataset.buy), btn));
+    });
+  }
+  if (currentProfile?.is_admin) wireAdminStore();
+}
+
+async function buyItem(itemId, btn){
+  btn.disabled = true;
+  const { data, error } = await supabase.rpc('purchase_item', { item_id_input: itemId });
+  btn.disabled = false;
+  if (error){ showToast(error.message); return; }
+  showToast(data.message);
+  if (data.success) await refreshCurrency();
+}
+
+function adminStoreBlock(){
+  return `
+    <div class="admin-block">
+      <h3>Add a store item (admin)</h3>
+      <div class="inline-form">
+        <input type="text" id="admin-item-name" placeholder="Name">
+        <input type="text" id="admin-item-desc" placeholder="Description">
+        <input type="number" id="admin-item-price" placeholder="Price" min="0" style="max-width:100px;">
+        <input type="text" id="admin-item-icon" placeholder="Icon (emoji)" style="max-width:100px;">
+        <button class="btn btn-gold" id="admin-item-submit">Add</button>
+      </div>
+    </div>
+  `;
+}
+function wireAdminStore(){
+  const btn = $('#admin-item-submit');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const name = $('#admin-item-name').value.trim();
+    const description = $('#admin-item-desc').value.trim();
+    const price = Number($('#admin-item-price').value) || 0;
+    const icon = $('#admin-item-icon').value.trim() || '🪙';
+    if (!name) return;
+    const { error } = await supabase.from('store_items').insert({ name, description, price, icon });
+    if (error){ showToast(error.message); return; }
+    showToast('Item added.');
+    showStore();
+  });
+}
+
+/* ============================================================
+   INVENTORY
+   ============================================================ */
+async function showInventory(){
+  currentBoardId = null;
+  setActiveSidebar({ nav: 'inventory' });
+  setContent(`
+    <div class="page-header">
+      <div><h2>Inventory</h2><div class="desc">Things you've bought from the market.</div></div>
+    </div>
+    <div id="inventory-grid" class="store-grid"></div>
+  `);
+  const { data, error } = await supabase
+    .from('inventory')
+    .select('purchased_at, store_items(name, description, icon)')
+    .eq('user_id', currentUser.id)
+    .order('purchased_at', { ascending: false });
+
+  const grid = $('#inventory-grid');
+  if (error){ grid.innerHTML = `<div class="empty-state">Couldn't load inventory.</div>`; return; }
+  if (!data.length){ grid.innerHTML = `<div class="empty-state">Nothing here yet — visit the Market.</div>`; return; }
+  grid.innerHTML = data.map(row => `
+    <div class="item-card">
+      <span class="item-icon">${esc(row.store_items?.icon || '🪙')}</span>
+      <span class="item-name">${esc(row.store_items?.name || '')}</span>
+      <span class="item-desc">${esc(row.store_items?.description || '')}</span>
+      <span class="hint">Bought ${timeAgo(row.purchased_at)}</span>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>
