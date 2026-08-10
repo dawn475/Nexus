@@ -6,7 +6,7 @@
 <title>Inkwell — Roleplay Forum</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous" onerror="document.getElementById('fatal-error-banner').style.display='block'; document.getElementById('fatal-error-banner').textContent='The Supabase library failed to load from the CDN. This is often caused by an ad-blocker, privacy extension, or content blocker in your browser. Try disabling it for this site, or try a different browser.';"></script>
 <style>
   :root{
     --void:#0c0f16;
@@ -352,9 +352,13 @@
 <script>
 window.addEventListener('error', function(e){
   const banner = document.getElementById('fatal-error-banner');
-  if (banner){
+  if (banner && banner.style.display !== 'block'){
     banner.style.display = 'block';
-    banner.textContent = 'Script error: ' + e.message + ' (line ' + e.lineno + ')';
+    if (e.message === 'Script error.' && e.lineno === 0){
+      banner.textContent = 'A script failed silently (likely blocked by an ad-blocker, privacy extension, or content blocker). Try disabling it for this site, or try a different browser like Chrome or Firefox without extensions.';
+    } else {
+      banner.textContent = 'Script error: ' + e.message + ' (line ' + e.lineno + ')';
+    }
   }
 });
 </script>
