@@ -368,7 +368,7 @@ window.addEventListener('error', function(e){
    ============================================================ */
 const SUPABASE_URL = 'https://vgnltiwozvnrxmpttnra.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnbmx0aXdvenZucnhtcHR0bnJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODE2MTMsImV4cCI6MjEwMTk1NzYxM30.LSW7G2AwseAZw3onfsOkbMGiHgJ5jNl-n_KsfeJgXtc';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ============================================================
    STATE
@@ -439,7 +439,7 @@ $('#login-form').addEventListener('submit', async (e) => {
   hideAuthMsg();
   const email = $('#login-email').value.trim();
   const password = $('#login-password').value;
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) authMsg('error', error.message);
 });
 
@@ -449,7 +449,7 @@ $('#signup-form').addEventListener('submit', async (e) => {
   const username = $('#signup-username').value.trim();
   const email = $('#signup-email').value.trim();
   const password = $('#signup-password').value;
-  const { error } = await supabase.auth.signUp({
+  const { error } = await sb.auth.signUp({
     email, password,
     options: { data: { username } }
   });
@@ -458,13 +458,13 @@ $('#signup-form').addEventListener('submit', async (e) => {
 });
 
 $('#logout-btn').addEventListener('click', async () => {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
 });
 
 /* ============================================================
    SESSION HANDLING
    ============================================================ */
-supabase.auth.onAuthStateChange(async (_event, session) => {
+sb.auth.onAuthStateChange(async (_event, session) => {
   if (session?.user) {
     currentUser = session.user;
     await loadProfile();
@@ -481,7 +481,7 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
 });
 
 async function loadProfile(){
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('profiles').select('*').eq('id', currentUser.id).single();
   if (error) { console.error(error); return; }
   currentProfile = data;
@@ -490,7 +490,7 @@ async function loadProfile(){
 }
 
 async function refreshCurrency(){
-  const { data } = await supabase
+  const { data } = await sb
     .from('profiles').select('currency').eq('id', currentUser.id).single();
   if (data) {
     currentProfile.currency = data.currency;
@@ -502,7 +502,7 @@ async function refreshCurrency(){
    BOARDS
    ============================================================ */
 async function loadBoards(){
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('boards').select('*').order('sort_order', { ascending: true });
   if (error) { console.error(error); return; }
   boards = data;
@@ -576,7 +576,7 @@ function wireAdminBoards(){
     const name = $('#admin-board-name').value.trim();
     const description = $('#admin-board-desc').value.trim();
     if (!name) return;
-    const { error } = await supabase.from('boards').insert({ name, description, sort_order: boards.length });
+    const { error } = await sb.from('boards').insert({ name, description, sort_order: boards.length });
     if (error) { showToast(error.message); return; }
     await loadBoards();
     showBoardList();
@@ -602,7 +602,7 @@ async function showThreadList(boardId){
   $('#back-to-boards').addEventListener('click', showBoardList);
   $('#open-new-thread').addEventListener('click', openNewThreadModal);
 
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('threads')
     .select('id, title, pinned, created_at, profiles(username)')
     .eq('board_id', boardId)
@@ -642,13 +642,13 @@ $('#new-thread-submit').addEventListener('click', async () => {
   const content = $('#new-thread-content').value.trim();
   if (!title || !content){ showToast('Title and opening post are both required.'); return; }
 
-  const { data: thread, error: threadErr } = await supabase
+  const { data: thread, error: threadErr } = await sb
     .from('threads')
     .insert({ board_id: currentBoardId, title, author_id: currentUser.id })
     .select().single();
   if (threadErr){ showToast(threadErr.message); return; }
 
-  const { error: postErr } = await supabase
+  const { error: postErr } = await sb
     .from('posts')
     .insert({ thread_id: thread.id, author_id: currentUser.id, content });
   if (postErr){ showToast(postErr.message); return; }
@@ -678,7 +678,7 @@ async function showThread(threadId){
   `);
   $('#back-to-threads').addEventListener('click', () => showThreadList(currentBoardId));
 
-  const { data: thread } = await supabase
+  const { data: thread } = await sb
     .from('threads').select('title, locked').eq('id', threadId).single();
   $('#thread-header').innerHTML = `<h2>${esc(thread?.title || '')}</h2>`;
 
@@ -687,7 +687,7 @@ async function showThread(threadId){
   $('#reply-submit').addEventListener('click', async () => {
     const content = $('#reply-box').value.trim();
     if (!content){ showToast('Write something first.'); return; }
-    const { error } = await supabase
+    const { error } = await sb
       .from('posts').insert({ thread_id: threadId, author_id: currentUser.id, content });
     if (error){ showToast(error.message); return; }
     $('#reply-box').value = '';
@@ -697,7 +697,7 @@ async function showThread(threadId){
 }
 
 async function loadPosts(threadId){
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('posts')
     .select('id, content, created_at, profiles(username)')
     .eq('thread_id', threadId)
@@ -730,7 +730,7 @@ async function showStore(){
     ${currentProfile?.is_admin ? adminStoreBlock() : ''}
   `);
 
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('store_items').select('*').eq('active', true).order('price', { ascending: true });
   const grid = $('#store-grid');
   if (error){ grid.innerHTML = `<div class="empty-state">Couldn't load the market.</div>`; return; }
@@ -754,7 +754,7 @@ async function showStore(){
 
 async function buyItem(itemId, btn){
   btn.disabled = true;
-  const { data, error } = await supabase.rpc('purchase_item', { item_id_input: itemId });
+  const { data, error } = await sb.rpc('purchase_item', { item_id_input: itemId });
   btn.disabled = false;
   if (error){ showToast(error.message); return; }
   showToast(data.message);
@@ -784,7 +784,7 @@ function wireAdminStore(){
     const price = Number($('#admin-item-price').value) || 0;
     const icon = $('#admin-item-icon').value.trim() || '🪙';
     if (!name) return;
-    const { error } = await supabase.from('store_items').insert({ name, description, price, icon });
+    const { error } = await sb.from('store_items').insert({ name, description, price, icon });
     if (error){ showToast(error.message); return; }
     showToast('Item added.');
     showStore();
@@ -803,7 +803,7 @@ async function showInventory(){
     </div>
     <div id="inventory-grid" class="store-grid"></div>
   `);
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('inventory')
     .select('purchased_at, store_items(name, description, icon)')
     .eq('user_id', currentUser.id)
