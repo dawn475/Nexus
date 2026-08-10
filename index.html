@@ -348,6 +348,16 @@
   </div>
 </div>
 
+<div id="fatal-error-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:#b3453b;color:#fff;padding:14px 18px;font-family:monospace;font-size:13px;z-index:9999;white-space:pre-wrap;"></div>
+<script>
+window.addEventListener('error', function(e){
+  const banner = document.getElementById('fatal-error-banner');
+  if (banner){
+    banner.style.display = 'block';
+    banner.textContent = 'Script error: ' + e.message + ' (line ' + e.lineno + ')';
+  }
+});
+</script>
 <script>
 /* ============================================================
    CONFIG — replace with your own Supabase project values
