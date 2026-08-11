@@ -137,6 +137,7 @@
 
   button,
   input,
+  select,
   textarea{
     font-family:var(--body);
   }
@@ -644,6 +645,7 @@
   }
 
   .field input,
+  .field select,
   .inline-form input{
     width:100%;
 
@@ -663,11 +665,13 @@
   }
 
   .field input:hover,
+  .field select:hover,
   .inline-form input:hover{
     border-color:var(--accent);
   }
 
   .field input:focus-visible,
+  .field select:focus-visible,
   .inline-form input:focus-visible{
     border-color:var(--accent);
   }
@@ -1158,6 +1162,11 @@
     font-size:9px;
   }
 
+  .profile-report-btn{
+    width:100%;
+    margin-top:16px;
+  }
+
   .profile-panel{
     min-width:0;
     overflow:hidden;
@@ -1491,6 +1500,103 @@
     gap:9px;
 
     margin-top:18px;
+  }
+
+  .report-target-summary{
+    margin:-8px 0 18px;
+    padding:11px 13px;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius);
+    background:var(--void-soft);
+    color:var(--muted-light);
+    font-size:12px;
+    line-height:1.5;
+  }
+
+  .report-modal-note{
+    margin:8px 0 0;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:9px;
+    line-height:1.5;
+  }
+
+  .report-filters{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+    margin-bottom:18px;
+  }
+
+  .report-card{
+    margin-bottom:12px;
+    padding:18px 20px;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius-large);
+    background:var(--panel);
+    box-shadow:var(--shadow-soft);
+  }
+
+  .report-card-head,
+  .report-card-actions{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:9px;
+  }
+
+  .report-card-head{
+    margin-bottom:12px;
+  }
+
+  .report-card-actions{
+    justify-content:flex-end;
+    margin-top:14px;
+  }
+
+  .report-type,
+  .report-status{
+    padding:4px 8px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    color:var(--accent-soft);
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+  }
+
+  .report-status.resolved{
+    border-color:var(--success);
+    color:#9fc5aa;
+  }
+
+  .report-status.dismissed{
+    color:var(--muted);
+  }
+
+  .report-target{
+    padding:12px 14px;
+    border-left:3px solid var(--accent);
+    background:var(--panel-raised);
+    color:var(--parchment-soft);
+    font-size:13px;
+    line-height:1.6;
+    overflow-wrap:anywhere;
+  }
+
+  .report-details{
+    margin:12px 0 0;
+    color:var(--muted-light);
+    font-size:12px;
+    line-height:1.65;
+    white-space:pre-wrap;
+  }
+
+  .reported-highlight{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(169,77,85,.16), var(--shadow-soft);
   }
 
   .empty-state{
@@ -1984,6 +2090,7 @@
     }
 
     .field input,
+    .field select,
     textarea,
     .composer textarea,
     .inline-form input{
@@ -2282,6 +2389,15 @@
           <button class="dropdown-link" data-nav="vault" type="button">
             Vault
           </button>
+
+          <div id="admin-menu-section" hidden>
+            <div class="menu-divider"></div>
+            <div class="menu-section-label">Moderation</div>
+
+            <button class="dropdown-link" data-nav="reports" type="button">
+              Reports
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2389,6 +2505,60 @@
 
   </div>
 
+</div>
+
+<!-- ================= REPORT MODAL ================= -->
+
+<div
+  class="modal-backdrop"
+  id="report-backdrop"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="report-modal-title"
+>
+  <form class="modal" id="report-form">
+    <h3 id="report-modal-title">Report content</h3>
+
+    <div
+      class="report-target-summary"
+      id="report-target-summary"
+    ></div>
+
+    <div class="field">
+      <label for="report-reason">Reason</label>
+      <select id="report-reason" required></select>
+    </div>
+
+    <div class="field">
+      <label for="report-details">Additional details</label>
+      <textarea
+        id="report-details"
+        maxlength="2000"
+        placeholder="Tell the moderation team what they should review..."
+      ></textarea>
+      <p class="report-modal-note">
+        Reports are private and visible only to administrators.
+      </p>
+    </div>
+
+    <div class="modal-actions">
+      <button
+        class="btn btn-ghost"
+        id="report-cancel"
+        type="button"
+      >
+        Cancel
+      </button>
+
+      <button
+        class="btn btn-danger"
+        id="report-submit"
+        type="submit"
+      >
+        Submit Report
+      </button>
+    </div>
+  </form>
 </div>
 
 <!-- ================= ERROR BANNER ================= -->
@@ -2568,6 +2738,7 @@ let boards = [];
 let currentBoardId = null;
 let currentThreadId = null;
 let currentThreadLocked = false;
+let currentReportTarget = null;
 
 let passwordRecoveryActive =
   (
@@ -3095,6 +3266,76 @@ function setContent(html){
   $('#content').innerHTML = html;
 }
 
+const REPORT_REASONS = {
+  post:[
+    ['spam', 'Spam'],
+    ['harassment', 'Harassment'],
+    ['inappropriate_content', 'Inappropriate content'],
+    ['rule_violation', 'Rule violation'],
+    ['other', 'Other']
+  ],
+  thread:[
+    ['spam', 'Spam'],
+    ['harassment', 'Harassment'],
+    ['inappropriate_content', 'Inappropriate content'],
+    ['rule_violation', 'Rule violation'],
+    ['other', 'Other']
+  ],
+  profile:[
+    ['harassment', 'Harassment'],
+    ['impersonation', 'Impersonation'],
+    ['inappropriate_content', 'Inappropriate profile content'],
+    ['suspected_alt', 'Suspected alternate account'],
+    ['spam', 'Spam'],
+    ['rule_violation', 'Rule violation'],
+    ['other', 'Other']
+  ]
+};
+
+function reportReasonLabel(reason){
+  const labels = {
+    spam:'Spam',
+    harassment:'Harassment',
+    inappropriate_content:'Inappropriate content',
+    impersonation:'Impersonation',
+    rule_violation:'Rule violation',
+    suspected_alt:'Suspected alternate account',
+    other:'Other'
+  };
+
+  return labels[reason] || reason;
+}
+
+function openReportModal(target){
+  if (!currentUser || !REPORT_REASONS[target?.type]){
+    showToast('Sign in to submit a report.');
+    return;
+  }
+
+  currentReportTarget = target;
+
+  $('#report-target-summary').textContent =
+    target.label;
+
+  $('#report-reason').innerHTML =
+    REPORT_REASONS[target.type]
+      .map(([value, label]) =>
+        `<option value="${value}">${esc(label)}</option>`
+      )
+      .join('');
+
+  $('#report-details').value = '';
+  $('#report-submit').disabled = false;
+  $('#report-submit').textContent = 'Submit Report';
+  $('#report-backdrop').classList.add('visible');
+  $('#report-reason').focus();
+}
+
+function closeReportModal(){
+  $('#report-backdrop')?.classList.remove('visible');
+  currentReportTarget = null;
+}
+
 
 /* ============================================================
    TOP MENU
@@ -3139,7 +3380,10 @@ $('#menu-dropdown')?.addEventListener('click', event => {
 document.addEventListener('click', closeMenu);
 
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closeMenu();
+  if (event.key === 'Escape'){
+    closeMenu();
+    closeReportModal();
+  }
 });
 
 $('#menu-home')?.addEventListener('click', () => {
@@ -3155,8 +3399,72 @@ $all('.dropdown-link[data-nav]').forEach(btn => {
     if (btn.dataset.nav === 'store') showStore();
     if (btn.dataset.nav === 'inventory') showInventory();
     if (btn.dataset.nav === 'vault') showVault();
+    if (btn.dataset.nav === 'reports') showReports();
   });
 });
+
+$('#report-cancel')?.addEventListener(
+  'click',
+  closeReportModal
+);
+
+$('#report-backdrop')?.addEventListener(
+  'click',
+  event => {
+    if (event.target === event.currentTarget){
+      closeReportModal();
+    }
+  }
+);
+
+$('#report-form')?.addEventListener(
+  'submit',
+  async event => {
+    event.preventDefault();
+
+    if (!currentReportTarget){
+      return;
+    }
+
+    const details =
+      $('#report-details').value.trim();
+
+    const targetColumn = {
+      post:'target_post_id',
+      thread:'target_thread_id',
+      profile:'target_profile_id'
+    }[currentReportTarget.type];
+
+    const submitButton = $('#report-submit');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Submitting...';
+
+    const { error } = await sb
+      .from('reports')
+      .insert({
+        reporter_id:currentUser.id,
+        target_type:currentReportTarget.type,
+        [targetColumn]:currentReportTarget.id,
+        reason:$('#report-reason').value,
+        details:details || null
+      });
+
+    if (error){
+      submitButton.disabled = false;
+      submitButton.textContent = 'Submit Report';
+
+      showToast(
+        error.code === '23505'
+          ? 'You already have an open report for this.'
+          : 'The report could not be submitted.'
+      );
+      return;
+    }
+
+    closeReportModal();
+    showToast('Report sent to the moderation team.');
+  }
+);
 
 $('#username-display')?.addEventListener('click', () => {
   showProfile(currentUser.id);
@@ -3559,6 +3867,9 @@ async function loadProfile(){
   $('#signed-in-admin-badge').hidden =
     data.is_admin !== true;
 
+  $('#admin-menu-section').hidden =
+    data.is_admin !== true;
+
   $('#currency-display').textContent =
     data.currency ?? 0;
 }
@@ -3786,6 +4097,20 @@ async function showProfile(
         <div class="profile-joined">
           Joined ${esc(joined)}
         </div>
+
+        ${
+          isOwner
+            ? ''
+            : `
+              <button
+                class="btn btn-ghost profile-report-btn"
+                id="profile-report"
+                type="button"
+              >
+                Report Profile
+              </button>
+            `
+        }
       </aside>
 
       <section class="profile-panel">
@@ -3822,6 +4147,16 @@ async function showProfile(
     .addEventListener(
       'click',
       showBoardList
+    );
+
+  $('#profile-report')
+    ?.addEventListener(
+      'click',
+      () => openReportModal({
+        type:'profile',
+        id:profile.id,
+        label:`Profile: ${profile.username}`
+      })
     );
 
   $('#profile-avatar')
@@ -4016,6 +4351,397 @@ async function showProfile(
         );
       }
     );
+}
+
+/* ============================================================
+   REPORT MODERATION
+   ============================================================ */
+
+async function showReports(activeStatus = 'open'){
+  if (currentProfile?.is_admin !== true){
+    showToast('Administrator access is required.');
+    await showBoardList();
+    return;
+  }
+
+  const allowedStatuses = [
+    'open',
+    'resolved',
+    'dismissed'
+  ];
+
+  const status = allowedStatuses.includes(activeStatus)
+    ? activeStatus
+    : 'open';
+
+  currentBoardId = null;
+  currentThreadId = null;
+  setActiveSidebar({ nav:'reports' });
+
+  setContent(`
+    <div class="page-header">
+      <div>
+        <h2>Reports</h2>
+        <div class="desc">
+          Private reports submitted by forum members.
+        </div>
+      </div>
+    </div>
+
+    <div class="report-filters">
+      ${
+        allowedStatuses
+          .map(item => `
+            <button
+              class="btn ${item === status ? 'btn-gold' : 'btn-ghost'}"
+              data-report-filter="${item}"
+              type="button"
+            >
+              ${esc(item.charAt(0).toUpperCase() + item.slice(1))}
+            </button>
+          `)
+          .join('')
+      }
+    </div>
+
+    <div id="reports-list">
+      <div class="empty-state">Loading reports...</div>
+    </div>
+  `);
+
+  $all('[data-report-filter]').forEach(button => {
+    button.addEventListener(
+      'click',
+      () => showReports(button.dataset.reportFilter)
+    );
+  });
+
+  const { data:reports, error } = await sb
+    .from('reports')
+    .select(`
+      id,
+      reporter_id,
+      target_type,
+      target_post_id,
+      target_thread_id,
+      target_profile_id,
+      reason,
+      details,
+      status,
+      created_at,
+      reviewed_at,
+      resolution_note,
+      reporter:profiles!reports_reporter_id_fkey(username),
+      reviewer:profiles!reports_reviewed_by_fkey(username)
+    `)
+    .eq('status', status)
+    .order('created_at', { ascending:false });
+
+  const list = $('#reports-list');
+
+  if (error){
+    list.innerHTML = `
+      <div class="empty-state">
+        Reports could not be loaded.
+      </div>
+    `;
+    showToast('Reports could not be loaded.');
+    return;
+  }
+
+  if (!reports?.length){
+    list.innerHTML = `
+      <div class="empty-state">
+        No ${esc(status)} reports.
+      </div>
+    `;
+    return;
+  }
+
+  const postIds = reports
+    .filter(report => report.target_post_id)
+    .map(report => report.target_post_id);
+
+  const threadIds = reports
+    .filter(report => report.target_thread_id)
+    .map(report => report.target_thread_id);
+
+  const profileIds = reports
+    .filter(report => report.target_profile_id)
+    .map(report => report.target_profile_id);
+
+  const emptyResult = Promise.resolve({ data:[], error:null });
+
+  const [postsResult, threadsResult, profilesResult] =
+    await Promise.all([
+      postIds.length
+        ? sb
+            .from('posts')
+            .select('id, thread_id, author_id, content')
+            .in('id', postIds)
+        : emptyResult,
+      threadIds.length
+        ? sb
+            .from('threads')
+            .select('id, board_id, author_id, title')
+            .in('id', threadIds)
+        : emptyResult,
+      profileIds.length
+        ? sb
+            .from('profiles')
+            .select('id, username')
+            .in('id', profileIds)
+        : emptyResult
+    ]);
+
+  const postsById = new Map(
+    (postsResult.data || []).map(item => [item.id, item])
+  );
+
+  const threadsById = new Map(
+    (threadsResult.data || []).map(item => [item.id, item])
+  );
+
+  const profilesById = new Map(
+    (profilesResult.data || []).map(item => [item.id, item])
+  );
+
+  function targetSummary(report){
+    if (report.target_type === 'post'){
+      const post = postsById.get(report.target_post_id);
+      return post
+        ? `Post: ${post.content.slice(0, 220)}`
+        : 'Post unavailable or deleted';
+    }
+
+    if (report.target_type === 'thread'){
+      const thread = threadsById.get(report.target_thread_id);
+      return thread
+        ? `Thread: ${thread.title}`
+        : 'Thread unavailable or deleted';
+    }
+
+    const profile = profilesById.get(report.target_profile_id);
+    return profile
+      ? `Profile: ${profile.username}`
+      : 'Profile unavailable or deleted';
+  }
+
+  list.innerHTML = reports
+    .map(report => `
+      <article class="report-card" data-report-id="${report.id}">
+        <div class="report-card-head">
+          <div>
+            <span class="report-type">${esc(report.target_type)}</span>
+            <span class="report-status ${esc(report.status)}">
+              ${esc(report.status)}
+            </span>
+          </div>
+
+          <span class="hint">
+            ${esc(timeAgo(report.created_at))}
+          </span>
+        </div>
+
+        <div class="report-target">
+          ${esc(targetSummary(report))}
+        </div>
+
+        <p class="report-details">
+          <strong>${esc(reportReasonLabel(report.reason))}</strong>
+          · Reported by ${esc(report.reporter?.username || 'Unknown member')}
+          ${
+            report.details
+              ? `\n\n${esc(report.details)}`
+              : ''
+          }
+          ${
+            report.resolution_note
+              ? `\n\nModerator note: ${esc(report.resolution_note)}`
+              : ''
+          }
+          ${
+            report.reviewer?.username
+              ? `\nReviewed by ${esc(report.reviewer.username)}`
+              : ''
+          }
+        </p>
+
+        <div class="report-card-actions">
+          <button
+            class="btn btn-ghost"
+            data-view-report-target="${report.id}"
+            type="button"
+          >
+            View Target
+          </button>
+
+          ${
+            report.status === 'open'
+              ? `
+                <button
+                  class="btn btn-ghost"
+                  data-report-action="dismissed"
+                  data-report-action-id="${report.id}"
+                  type="button"
+                >
+                  Dismiss
+                </button>
+
+                <button
+                  class="btn btn-gold"
+                  data-report-action="resolved"
+                  data-report-action-id="${report.id}"
+                  type="button"
+                >
+                  Resolve
+                </button>
+              `
+              : `
+                <button
+                  class="btn btn-ghost"
+                  data-report-action="open"
+                  data-report-action-id="${report.id}"
+                  type="button"
+                >
+                  Reopen
+                </button>
+              `
+          }
+        </div>
+      </article>
+    `)
+    .join('');
+
+  $all('[data-view-report-target]').forEach(button => {
+    button.addEventListener(
+      'click',
+      async () => {
+        const report = reports.find(
+          item => item.id === button.dataset.viewReportTarget
+        );
+
+        if (!report){
+          return;
+        }
+
+        if (report.target_type === 'profile'){
+          const profile = profilesById.get(report.target_profile_id);
+          profile
+            ? await showProfile(profile.id)
+            : showToast('That profile is no longer available.');
+          return;
+        }
+
+        if (report.target_type === 'thread'){
+          const thread = threadsById.get(report.target_thread_id);
+          if (!thread){
+            showToast('That thread is no longer available.');
+            return;
+          }
+
+          currentBoardId = thread.board_id;
+          await showThread(thread.id);
+          return;
+        }
+
+        const post = postsById.get(report.target_post_id);
+        if (!post){
+          showToast('That post is no longer available.');
+          return;
+        }
+
+        await showThread(post.thread_id);
+
+        const postCard = document.querySelector(
+          `.post-card[data-post-id="${post.id}"]`
+        );
+
+        postCard?.classList.add('reported-highlight');
+        postCard?.scrollIntoView({
+          behavior:'smooth',
+          block:'center'
+        });
+
+        if (postCard){
+          setTimeout(
+            () => postCard.classList.remove('reported-highlight'),
+            3500
+          );
+        }
+      }
+    );
+  });
+
+  $all('[data-report-action]').forEach(button => {
+    button.addEventListener(
+      'click',
+      async () => {
+        const nextStatus = button.dataset.reportAction;
+        let resolutionNote = null;
+
+        if (nextStatus !== 'open'){
+          const enteredNote = window.prompt(
+            nextStatus === 'resolved'
+              ? 'Optional resolution note:'
+              : 'Optional dismissal note:'
+          );
+
+          if (enteredNote === null){
+            return;
+          }
+
+          resolutionNote = enteredNote.trim() || null;
+
+          if (resolutionNote?.length > 2000){
+            showToast('Moderator notes must be 2,000 characters or fewer.');
+            return;
+          }
+        }
+
+        button.disabled = true;
+
+        const changes = nextStatus === 'open'
+          ? {
+              status:'open',
+              reviewed_at:null,
+              reviewed_by:null,
+              resolution_note:null
+            }
+          : {
+              status:nextStatus,
+              reviewed_at:new Date().toISOString(),
+              reviewed_by:currentUser.id,
+              resolution_note:resolutionNote
+            };
+
+        const { data:updatedReport, error:updateError } = await sb
+          .from('reports')
+          .update(changes)
+          .eq('id', button.dataset.reportActionId)
+          .select('id')
+          .single();
+
+        if (updateError || !updatedReport){
+          button.disabled = false;
+          showToast(
+            updateError?.code === '23505'
+              ? 'This target already has another open report from that member.'
+              : 'The report could not be updated.'
+          );
+          return;
+        }
+
+        showToast(
+          nextStatus === 'open'
+            ? 'Report reopened.'
+            : `Report ${nextStatus}.`
+        );
+
+        await showReports(status);
+      }
+    );
+  });
 }
 
 /* ============================================================
@@ -4743,16 +5469,37 @@ async function showThread(threadId){
     </div>
 
     ${
-      canEditThread
+      canEditThread ||
+      thread.author_id !== currentUser.id
         ? `
           <div class="thread-moderation">
 
-            <button
-              class="btn btn-ghost"
-              id="thread-title-edit"
-            >
-              Edit Title
-            </button>
+            ${
+              thread.author_id !== currentUser.id
+                ? `
+                  <button
+                    class="btn btn-ghost"
+                    id="thread-report"
+                    type="button"
+                  >
+                    Report Thread
+                  </button>
+                `
+                : ''
+            }
+
+            ${
+              canEditThread
+                ? `
+                  <button
+                    class="btn btn-ghost"
+                    id="thread-title-edit"
+                  >
+                    Edit Title
+                  </button>
+                `
+                : ''
+            }
 
             ${
               isAdmin
@@ -4834,6 +5581,16 @@ async function showThread(threadId){
   await loadPosts(
     threadId
   );
+
+  $('#thread-report')
+    ?.addEventListener(
+      'click',
+      () => openReportModal({
+        type:'thread',
+        id:threadId,
+        label:`Thread: ${thread.title}`
+      })
+    );
 
   if (!thread.locked || isAdmin){
 
@@ -5331,6 +6088,20 @@ async function loadPosts(threadId){
                   </button>
 
                   ${
+                    p.author_id !== currentUser.id
+                      ? `
+                        <button
+                          class="post-action"
+                          data-report-post="${p.id}"
+                          type="button"
+                        >
+                          Report
+                        </button>
+                      `
+                      : ''
+                  }
+
+                  ${
                     canManagePost
                       ? `
                         <button
@@ -5459,6 +6230,29 @@ async function loadPosts(threadId){
           replyBox.scrollIntoView({
             behavior:'smooth',
             block:'center'
+          });
+        }
+      );
+    });
+
+  $all('#posts-container [data-report-post]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        () => {
+          const post = data.find(
+            item =>
+              item.id === button.dataset.reportPost
+          );
+
+          if (!post){
+            return;
+          }
+
+          openReportModal({
+            type:'post',
+            id:post.id,
+            label:`Post by ${post.profiles?.username || 'unknown member'}`
           });
         }
       );
