@@ -697,6 +697,23 @@
     color:var(--parchment);
   }
 
+  .auth-secondary-action{
+    margin:-5px 0 17px;
+    text-align:right;
+  }
+
+  .auth-secondary-action button{
+    padding:0;
+    border:0;
+    background:none;
+    color:var(--accent-soft);
+    font-size:11px;
+  }
+
+  .auth-secondary-action button:hover{
+    color:var(--parchment);
+  }
+
   .auth-msg{
     display:none;
 
@@ -1037,6 +1054,46 @@
     gap:8px;
   }
 
+  .post-meta-wrap,
+  .post-actions,
+  .thread-owner-actions,
+  .post-edit-actions{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:7px;
+  }
+
+  .post-meta-wrap{
+    justify-content:flex-end;
+  }
+
+  .post-action{
+    padding:3px 6px;
+    border:0;
+    background:none;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:9px;
+  }
+
+  .post-action:hover{
+    color:var(--accent-soft);
+  }
+
+  .post-action.danger:hover{
+    color:var(--danger-text);
+  }
+
+  .post-edit-box{
+    min-height:190px;
+  }
+
+  .post-edit-actions{
+    justify-content:flex-end;
+    margin-top:9px;
+  }
+
   .profile-name-row{
     justify-content:center;
     margin-bottom:5px;
@@ -1240,6 +1297,14 @@
     border-left:2px solid var(--accent);
     background:var(--void-soft);
     color:var(--muted-light);
+  }
+
+  .quote-attribution{
+    margin-bottom:7px;
+    color:var(--accent-soft);
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.3px;
   }
 
   .bbcode-content a{
@@ -1839,6 +1904,16 @@
       justify-content:flex-start;
     }
 
+    .post-head{
+      align-items:flex-start;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .post-meta-wrap{
+      justify-content:flex-start;
+    }
+
     .thread-moderation select{
       flex:1 1 100%;
       max-width:none;
@@ -2001,6 +2076,15 @@
         Enter Nexus
       </button>
 
+      <div class="auth-secondary-action">
+        <button
+          type="button"
+          id="forgot-password"
+        >
+          Forgot your password?
+        </button>
+      </div>
+
     </form>
 
     <form id="signup-form" style="display:none;">
@@ -2047,6 +2131,62 @@
 
     </form>
 
+    <form id="password-request-form" style="display:none;">
+
+      <div class="field">
+        <label for="password-request-email">Account email</label>
+        <input
+          type="email"
+          id="password-request-email"
+          required
+          autocomplete="email"
+        >
+      </div>
+
+      <button
+        type="submit"
+        class="btn btn-gold"
+        style="width:100%;"
+      >
+        Send Reset Link
+      </button>
+
+    </form>
+
+    <form id="password-update-form" style="display:none;">
+
+      <div class="field">
+        <label for="password-update-new">New password</label>
+        <input
+          type="password"
+          id="password-update-new"
+          required
+          minlength="8"
+          autocomplete="new-password"
+        >
+      </div>
+
+      <div class="field">
+        <label for="password-update-confirm">Confirm password</label>
+        <input
+          type="password"
+          id="password-update-confirm"
+          required
+          minlength="8"
+          autocomplete="new-password"
+        >
+      </div>
+
+      <button
+        type="submit"
+        class="btn btn-gold"
+        style="width:100%;"
+      >
+        Save New Password
+      </button>
+
+    </form>
+
     <div class="auth-toggle">
 
       <span id="toggle-to-signup-wrap">
@@ -2069,6 +2209,19 @@
           id="toggle-to-login"
         >
           Log in
+        </button>
+      </span>
+
+      <span
+        id="password-request-back-wrap"
+        style="display:none;"
+      >
+        Remembered it?
+        <button
+          type="button"
+          id="password-request-back"
+        >
+          Return to login
         </button>
       </span>
 
@@ -2408,6 +2561,7 @@ let boards = [];
 
 let currentBoardId = null;
 let currentThreadId = null;
+let currentThreadLocked = false;
 
 /* ============================================================
    HELPERS
@@ -2508,6 +2662,11 @@ function applyBbCode(html){
     [/\[center\]([\s\S]*?)\[\/center\]/gi, '<div style="text-align:center">$1</div>'],
     [/\[left\]([\s\S]*?)\[\/left\]/gi, '<div style="text-align:left">$1</div>'],
     [/\[right\]([\s\S]*?)\[\/right\]/gi, '<div style="text-align:right">$1</div>'],
+    [
+      /\[quote=([^\]\r\n]{1,80})\]([\s\S]*?)\[\/quote\]/gi,
+      (_match, author, content) =>
+        `<blockquote><div class="quote-attribution">${author} wrote:</div>${content}</blockquote>`
+    ],
     [/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote>$1</blockquote>'],
     [/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre><code>$1</code></pre>']
   ];
@@ -2986,41 +3145,69 @@ $('#username-display')?.addEventListener('click', () => {
    AUTH SCREEN WIRING
    ============================================================ */
 
+function setAuthView(mode){
+  const views = {
+    login:'#login-form',
+    signup:'#signup-form',
+    request:'#password-request-form',
+    update:'#password-update-form'
+  };
+
+  Object.entries(views).forEach(
+    ([name, selector]) => {
+      $(selector).style.display =
+        name === mode
+          ? 'block'
+          : 'none';
+    }
+  );
+
+  $('#toggle-to-signup-wrap').style.display =
+    mode === 'login'
+      ? 'inline'
+      : 'none';
+
+  $('#toggle-to-login-wrap').style.display =
+    mode === 'signup'
+      ? 'inline'
+      : 'none';
+
+  $('#password-request-back-wrap').style.display =
+    mode === 'request'
+      ? 'inline'
+      : 'none';
+
+  hideAuthMsg();
+}
+
 $('#toggle-to-signup')
-  .addEventListener('click', () => {
-
-    $('#login-form').style.display =
-      'none';
-
-    $('#signup-form').style.display =
-      'block';
-
-    $('#toggle-to-signup-wrap').style.display =
-      'none';
-
-    $('#toggle-to-login-wrap').style.display =
-      'block';
-
-    hideAuthMsg();
-  });
+  .addEventListener(
+    'click',
+    () => setAuthView('signup')
+  );
 
 $('#toggle-to-login')
-  .addEventListener('click', () => {
+  .addEventListener(
+    'click',
+    () => setAuthView('login')
+  );
 
-    $('#signup-form').style.display =
-      'none';
+$('#forgot-password')
+  .addEventListener(
+    'click',
+    () => {
+      $('#password-request-email').value =
+        $('#login-email').value.trim();
 
-    $('#login-form').style.display =
-      'block';
+      setAuthView('request');
+    }
+  );
 
-    $('#toggle-to-login-wrap').style.display =
-      'none';
-
-    $('#toggle-to-signup-wrap').style.display =
-      'block';
-
-    hideAuthMsg();
-  });
+$('#password-request-back')
+  .addEventListener(
+    'click',
+    () => setAuthView('login')
+  );
 
 function hideAuthMsg(){
 
@@ -3131,6 +3318,105 @@ $('#signup-form')
     }
   );
 
+$('#password-request-form')
+  .addEventListener(
+    'submit',
+    async event => {
+      event.preventDefault();
+      hideAuthMsg();
+
+      const email =
+        $('#password-request-email')
+          .value
+          .trim();
+
+      const redirectUrl =
+        window.location.origin +
+        window.location.pathname;
+
+      const { error } =
+        await sb.auth
+          .resetPasswordForEmail(
+            email,
+            {
+              redirectTo:
+                redirectUrl
+            }
+          );
+
+      if (error){
+        authMsg(
+          'error',
+          error.message
+        );
+        return;
+      }
+
+      setAuthView('login');
+      authMsg(
+        'success',
+        'If an account uses that email, a password reset link has been sent.'
+      );
+    }
+  );
+
+$('#password-update-form')
+  .addEventListener(
+    'submit',
+    async event => {
+      event.preventDefault();
+      hideAuthMsg();
+
+      const password =
+        $('#password-update-new')
+          .value;
+
+      const confirmation =
+        $('#password-update-confirm')
+          .value;
+
+      if (password !== confirmation){
+        authMsg(
+          'error',
+          'The passwords do not match.'
+        );
+        return;
+      }
+
+      if (password.length < 8){
+        authMsg(
+          'error',
+          'Use at least 8 characters for your new password.'
+        );
+        return;
+      }
+
+      const { error } =
+        await sb.auth.updateUser({
+          password
+        });
+
+      if (error){
+        authMsg(
+          'error',
+          error.message
+        );
+        return;
+      }
+
+      await sb.auth.signOut({
+        scope:'local'
+      });
+
+      $('#password-update-form').reset();
+      setAuthView('login');
+      authMsg(
+        'success',
+        'Password updated. You can now log in with your new password.'
+      );
+    }
+  );
+
 $('#logout-btn')
   .addEventListener(
     'click',
@@ -3146,7 +3432,30 @@ $('#logout-btn')
    ============================================================ */
 
 sb.auth.onAuthStateChange(
-  async (_event, session) => {
+  async (event, session) => {
+
+    if (
+      event === 'PASSWORD_RECOVERY' &&
+      session?.user
+    ){
+      currentUser =
+        session.user;
+
+      $('#app').classList.remove(
+        'visible'
+      );
+
+      $('#auth-screen').style.display =
+        'flex';
+
+      setAuthView('update');
+      authMsg(
+        'success',
+        'Choose a new password for your account.'
+      );
+
+      return;
+    }
 
     if (session?.user){
 
@@ -4309,7 +4618,7 @@ async function showThread(threadId){
     await sb
       .from('threads')
       .select(
-        'title, locked, board_id, is_approved_character'
+        'title, author_id, locked, board_id, is_approved_character'
       )
       .eq(
         'id',
@@ -4334,8 +4643,18 @@ async function showThread(threadId){
   currentBoardId =
     thread.board_id;
 
+  currentThreadLocked =
+    thread.locked;
+
   const isAdmin =
     currentProfile?.is_admin === true;
+
+  const canEditThread =
+    isAdmin ||
+    (
+      thread.author_id === currentUser.id &&
+      !thread.locked
+    );
 
   const boardOptions =
     boards
@@ -4377,49 +4696,75 @@ async function showThread(threadId){
     </div>
 
     ${
-      isAdmin
+      canEditThread
         ? `
           <div class="thread-moderation">
 
-            <select
-              id="thread-move-board"
-              aria-label="Move thread to another board"
-            >
-              ${boardOptions}
-            </select>
-
             <button
               class="btn btn-ghost"
-              id="thread-move-submit"
+              id="thread-title-edit"
             >
-              Move Thread
+              Edit Title
             </button>
 
-            <button
-              class="btn ${
-                thread.locked
-                  ? 'btn-ghost'
-                  : 'btn-danger'
-              }"
-              id="thread-lock-toggle"
-            >
-              ${
-                thread.locked
-                  ? 'Unlock Thread'
-                  : 'Lock Thread'
-              }
-            </button>
+            ${
+              isAdmin
+                ? `
+                  <button
+                    class="btn btn-danger"
+                    id="thread-delete"
+                  >
+                    Delete Thread
+                  </button>
+                `
+                : ''
+            }
 
-            <button
-              class="btn btn-ghost"
-              id="thread-character-toggle"
-            >
-              ${
-                thread.is_approved_character
-                  ? 'Remove Character Approval'
-                  : 'Approve Character'
-              }
-            </button>
+            ${
+              isAdmin
+                ? `
+                  <select
+                    id="thread-move-board"
+                    aria-label="Move thread to another board"
+                  >
+                    ${boardOptions}
+                  </select>
+
+                  <button
+                    class="btn btn-ghost"
+                    id="thread-move-submit"
+                  >
+                    Move Thread
+                  </button>
+
+                  <button
+                    class="btn ${
+                      thread.locked
+                        ? 'btn-ghost'
+                        : 'btn-danger'
+                    }"
+                    id="thread-lock-toggle"
+                  >
+                    ${
+                      thread.locked
+                        ? 'Unlock Thread'
+                        : 'Lock Thread'
+                    }
+                  </button>
+
+                  <button
+                    class="btn btn-ghost"
+                    id="thread-character-toggle"
+                  >
+                    ${
+                      thread.is_approved_character
+                        ? 'Remove Character Approval'
+                        : 'Approve Character'
+                    }
+                  </button>
+                `
+                : ''
+            }
 
           </div>
         `
@@ -4478,6 +4823,107 @@ async function showThread(threadId){
       </div>
     `;
   }
+
+  $('#thread-title-edit')
+    ?.addEventListener(
+      'click',
+      async () => {
+        const nextTitle =
+          window.prompt(
+            'Edit the thread title:',
+            thread.title
+          );
+
+        if (nextTitle === null){
+          return;
+        }
+
+        const title =
+          nextTitle.trim();
+
+        if (!title){
+          showToast(
+            'A thread title is required.'
+          );
+          return;
+        }
+
+        if (title.length > 160){
+          showToast(
+            'Keep the title to 160 characters or fewer.'
+          );
+          return;
+        }
+
+        const {
+          data:updatedThread,
+          error:updateTitleError
+        } = await sb
+          .from('threads')
+          .update({ title })
+          .eq('id', threadId)
+          .select('title')
+          .single();
+
+        if (updateTitleError){
+          showToast(
+            updateTitleError.message
+          );
+          return;
+        }
+
+        showToast(
+          'Thread title updated.'
+        );
+
+        thread.title =
+          updatedThread.title;
+
+        await showThread(threadId);
+      }
+    );
+
+  $('#thread-delete')
+    ?.addEventListener(
+      'click',
+      async () => {
+        const confirmed =
+          window.confirm(
+            'Delete this entire thread and all of its replies? This cannot be undone.'
+          );
+
+        if (!confirmed){
+          return;
+        }
+
+        const {
+          data:deletedThread,
+          error:deleteThreadError
+        } = await sb
+          .from('threads')
+          .delete()
+          .eq('id', threadId)
+          .select('id')
+          .single();
+
+        if (
+          deleteThreadError ||
+          !deletedThread
+        ){
+          showToast(
+            deleteThreadError?.message ||
+            'The thread could not be deleted.'
+          );
+          return;
+        }
+
+        currentThreadId = null;
+        showToast('Thread deleted.');
+        await showThreadList(
+          thread.board_id
+        );
+      }
+    );
 
   if (isAdmin){
 
@@ -4786,8 +5232,19 @@ async function loadPosts(threadId){
   container.innerHTML =
     data
       .map(
-        (p, index) => `
-          <div class="post-card">
+        (p, index) => {
+          const canManagePost =
+            currentProfile?.is_admin === true ||
+            (
+              p.author_id === currentUser.id &&
+              !currentThreadLocked
+            );
+
+          return `
+          <div
+            class="post-card"
+            data-post-id="${p.id}"
+          >
 
             <div class="post-head">
 
@@ -4810,11 +5267,51 @@ async function loadPosts(threadId){
                 }
               </div>
 
-              <span class="post-time">
-                ${timeAgo(
-                  p.created_at
-                )}
-              </span>
+              <div class="post-meta-wrap">
+                <span class="post-time">
+                  ${timeAgo(
+                    p.created_at
+                  )}
+                </span>
+
+                <div class="post-actions">
+                  <button
+                    class="post-action"
+                    data-quote-post="${p.id}"
+                    type="button"
+                  >
+                    Quote
+                  </button>
+
+                  ${
+                    canManagePost
+                      ? `
+                        <button
+                          class="post-action"
+                          data-edit-post="${p.id}"
+                          type="button"
+                        >
+                          Edit
+                        </button>
+
+                        ${
+                          index > 0
+                            ? `
+                              <button
+                                class="post-action danger"
+                                data-delete-post="${p.id}"
+                                type="button"
+                              >
+                                Delete
+                              </button>
+                            `
+                            : ''
+                        }
+                      `
+                      : ''
+                  }
+                </div>
+              </div>
 
             </div>
 
@@ -4824,7 +5321,8 @@ async function loadPosts(threadId){
             ></div>
 
           </div>
-        `
+        `;
+        }
       )
       .join('');
 
@@ -4853,6 +5351,233 @@ async function loadPosts(threadId){
         () => showProfile(
           link.dataset.profileId
         )
+      );
+    });
+
+  $all('#posts-container [data-quote-post]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        () => {
+          const post =
+            data.find(
+              item =>
+                item.id ===
+                button.dataset.quotePost
+            );
+
+          const replyBox =
+            $('#reply-box');
+
+          if (!post || !replyBox){
+            showToast(
+              'This thread is not accepting replies.'
+            );
+            return;
+          }
+
+          const author =
+            (
+              post.profiles?.username ||
+              'Unknown member'
+            )
+              .replace(/\]/g, '')
+              .slice(0, 80);
+
+          const quote =
+            `[quote=${author}]\n${post.content}\n[/quote]\n\n`;
+
+          const start =
+            replyBox.selectionStart ??
+            replyBox.value.length;
+
+          const end =
+            replyBox.selectionEnd ??
+            start;
+
+          replyBox.value =
+            replyBox.value.slice(0, start) +
+            quote +
+            replyBox.value.slice(end);
+
+          const cursor =
+            start + quote.length;
+
+          replyBox.focus();
+          replyBox.setSelectionRange(
+            cursor,
+            cursor
+          );
+
+          replyBox.scrollIntoView({
+            behavior:'smooth',
+            block:'center'
+          });
+        }
+      );
+    });
+
+  $all('#posts-container [data-edit-post]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        () => {
+          const post =
+            data.find(
+              item =>
+                item.id ===
+                button.dataset.editPost
+            );
+
+          const card =
+            button.closest('.post-card');
+
+          const postBody =
+            card?.querySelector('.post-body');
+
+          if (!post || !postBody){
+            return;
+          }
+
+          postBody.innerHTML = `
+            <textarea
+              class="post-edit-box"
+              aria-label="Edit post"
+            ></textarea>
+
+            <div class="post-edit-actions">
+              <button
+                class="btn btn-ghost"
+                data-cancel-post-edit
+                type="button"
+              >
+                Cancel
+              </button>
+
+              <button
+                class="btn btn-gold"
+                data-save-post-edit
+                type="button"
+              >
+                Save Changes
+              </button>
+            </div>
+          `;
+
+          const editor =
+            postBody.querySelector(
+              '.post-edit-box'
+            );
+
+          editor.value =
+            post.content;
+
+          editor.focus();
+
+          postBody
+            .querySelector(
+              '[data-cancel-post-edit]'
+            )
+            .addEventListener(
+              'click',
+              () => loadPosts(threadId)
+            );
+
+          postBody
+            .querySelector(
+              '[data-save-post-edit]'
+            )
+            .addEventListener(
+              'click',
+              async event => {
+                const content =
+                  editor.value.trim();
+
+                if (!content){
+                  showToast(
+                    'A post cannot be empty.'
+                  );
+                  return;
+                }
+
+                event.currentTarget.disabled =
+                  true;
+
+                const {
+                  data:updatedPost,
+                  error:updatePostError
+                } = await sb
+                  .from('posts')
+                  .update({ content })
+                  .eq('id', post.id)
+                  .select('id')
+                  .single();
+
+                if (
+                  updatePostError ||
+                  !updatedPost
+                ){
+                  event.currentTarget.disabled =
+                    false;
+
+                  showToast(
+                    updatePostError?.message ||
+                    'The post could not be updated.'
+                  );
+                  return;
+                }
+
+                showToast('Post updated.');
+                await loadPosts(threadId);
+              }
+            );
+        }
+      );
+    });
+
+  $all('#posts-container [data-delete-post]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        async () => {
+          if (
+            !window.confirm(
+              'Delete this reply? This cannot be undone.'
+            )
+          ){
+            return;
+          }
+
+          button.disabled = true;
+
+          const {
+            data:deletedPost,
+            error:deletePostError
+          } = await sb
+            .from('posts')
+            .delete()
+            .eq(
+              'id',
+              button.dataset.deletePost
+            )
+            .select('id')
+            .single();
+
+          if (
+            deletePostError ||
+            !deletedPost
+          ){
+            button.disabled = false;
+            showToast(
+              deletePostError?.message ||
+              'The reply could not be deleted.'
+            );
+            return;
+          }
+
+          showToast('Reply deleted.');
+          await loadPosts(threadId);
+        }
       );
     });
 }
