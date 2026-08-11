@@ -4045,6 +4045,11 @@ $('#logout-btn')
 sb.auth.onAuthStateChange(
   async (event, session) => {
 
+    const sameActiveSession =
+      session?.user &&
+      currentUser?.id === session.user.id &&
+      $('#app').classList.contains('visible');
+
     if (
       (
         event === 'PASSWORD_RECOVERY' ||
@@ -4075,6 +4080,14 @@ sb.auth.onAuthStateChange(
     }
 
     if (session?.user){
+
+      // Supabase may emit SIGNED_IN or TOKEN_REFRESHED again when a browser
+      // tab regains focus. The client already has the fresh session, so avoid
+      // rebuilding the current view and destroying unfinished form text.
+      if (sameActiveSession){
+        currentUser = session.user;
+        return;
+      }
 
       currentUser =
         session.user;
