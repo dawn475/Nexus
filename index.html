@@ -1447,6 +1447,25 @@
     gap:8px;
   }
 
+  .post-avatar,
+  .post-avatar-fallback{
+    width:46px;
+    height:46px;
+    flex:0 0 46px;
+    border:1px solid var(--line);
+    border-radius:50%;
+    background:var(--void-soft);
+    object-fit:cover;
+  }
+
+  .post-avatar-fallback{
+    display:grid;
+    place-items:center;
+    color:var(--accent-soft);
+    font-family:var(--display);
+    font-size:18px;
+  }
+
   .post-identity{
     display:flex;
     flex-direction:column;
@@ -1667,7 +1686,6 @@
   .character-card{
     display:flex;
     align-items:center;
-    justify-content:space-between;
     gap:12px;
     width:100%;
     padding:15px 16px;
@@ -1678,8 +1696,51 @@
     text-align:left;
   }
 
-  .character-card:hover{
+  .character-card:hover,
+  .character-card:focus-within{
     border-color:var(--accent);
+  }
+
+  .character-avatar,
+  .character-avatar-fallback{
+    width:58px;
+    height:58px;
+    flex:0 0 58px;
+    border:1px solid var(--line);
+    border-radius:50%;
+    background:var(--void-soft);
+    object-fit:cover;
+  }
+
+  .character-avatar-fallback{
+    display:grid;
+    place-items:center;
+    color:var(--accent-soft);
+    font-family:var(--display);
+    font-size:24px;
+  }
+
+  .character-card-main{
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:4px;
+    min-width:0;
+    border:0;
+    background:none;
+    color:inherit;
+    text-align:left;
+  }
+
+  .character-card-actions{
+    display:flex;
+    flex:0 0 auto;
+    gap:7px;
+  }
+
+  .character-avatar-input{
+    display:none;
   }
 
   .character-card strong{
@@ -2534,10 +2595,19 @@
       margin-left:0;
     }
 
-    .profile-form-foot,
-    .character-card{
+    .profile-form-foot{
       align-items:stretch;
       flex-direction:column;
+    }
+
+    .character-card{
+      align-items:flex-start;
+      flex-wrap:wrap;
+    }
+
+    .character-card-actions{
+      width:100%;
+      padding-left:70px;
     }
 
     .board-card{
@@ -5104,7 +5174,7 @@ async function showProfile(
     sb
       .from('threads')
       .select(
-        'id, title, board_id, character_approved_at, boards(name)'
+        'id, title, board_id, character_avatar_url, character_approved_at, boards(name)'
       )
       .eq('author_id', profileId)
       .eq('is_approved_character', true)
@@ -5212,21 +5282,66 @@ async function showProfile(
         ? `<div class="character-list">
             ${
               characters
-                .map(character => `
-                  <button
-                    class="character-card"
-                    data-character-thread="${character.id}"
-                    data-character-board="${character.board_id}"
-                    type="button"
-                  >
-                    <strong>
-                      ${esc(character.title)}
-                    </strong>
-                    <span>
-                      ${esc(character.boards?.name || 'Character thread')}
-                    </span>
-                  </button>
-                `)
+                .map(character => {
+                  const characterInitial =
+                    (character.title || '?')
+                      .trim()
+                      .charAt(0)
+                      .toUpperCase();
+
+                  return `
+                    <div class="character-card">
+                      ${
+                        character.character_avatar_url
+                          ? `<img
+                              class="character-avatar"
+                              src="${esc(character.character_avatar_url)}"
+                              alt="${esc(character.title)}'s picture"
+                              data-avatar-fallback="${esc(characterInitial)}"
+                            >`
+                          : `<div class="character-avatar-fallback">
+                              ${esc(characterInitial)}
+                            </div>`
+                      }
+
+                      <button
+                        class="character-card-main"
+                        data-character-thread="${character.id}"
+                        data-character-board="${character.board_id}"
+                        type="button"
+                      >
+                        <strong>${esc(character.title)}</strong>
+                        <span>
+                          ${esc(character.boards?.name || 'Character thread')}
+                        </span>
+                      </button>
+
+                      ${
+                        isOwner
+                          ? `<div class="character-card-actions">
+                              <label class="btn btn-ghost">
+                                ${character.character_avatar_url ? 'Change' : 'Add picture'}
+                                <input
+                                  class="character-avatar-input"
+                                  data-character-avatar-input="${character.id}"
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp,image/gif"
+                                >
+                              </label>
+                              ${
+                                character.character_avatar_url
+                                  ? `<button
+                                      class="btn btn-ghost"
+                                      data-character-avatar-remove="${character.id}"
+                                      type="button"
+                                    >Remove</button>`
+                                  : ''
+                              }
+                            </div>`
+                          : ''
+                      }
+                    </div>`;
+                })
                 .join('')
             }
           </div>`
@@ -5374,6 +5489,137 @@ async function showProfile(
           showThread(
             card.dataset.characterThread
           );
+        }
+      );
+    });
+
+  $all('.character-avatar[data-avatar-fallback]')
+    .forEach(image => {
+      image.addEventListener(
+        'error',
+        event => {
+          const fallback = document.createElement('div');
+          fallback.className = 'character-avatar-fallback';
+          fallback.textContent =
+            event.currentTarget.dataset.avatarFallback;
+          event.currentTarget.replaceWith(fallback);
+        },
+        { once:true }
+      );
+    });
+
+  $all('[data-character-avatar-input]')
+    .forEach(input => {
+      input.addEventListener(
+        'change',
+        async () => {
+          const avatarFile = input.files[0];
+          if (!avatarFile) return;
+
+          const allowedTypes = [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/gif'
+          ];
+
+          if (!allowedTypes.includes(avatarFile.type)){
+            showToast('Choose a JPG, PNG, WebP, or GIF image.');
+            input.value = '';
+            return;
+          }
+
+          if (avatarFile.size > 2097152){
+            showToast('Character pictures must be 2 MB or smaller.');
+            input.value = '';
+            return;
+          }
+
+          input.disabled = true;
+          const characterId = input.dataset.characterAvatarInput;
+          const avatarPath =
+            `${currentUser.id}/characters/${characterId}`;
+
+          const { error:uploadError } =
+            await sb.storage
+              .from('avatars')
+              .upload(
+                avatarPath,
+                avatarFile,
+                {
+                  cacheControl:'3600',
+                  contentType:avatarFile.type,
+                  upsert:true
+                }
+              );
+
+          if (uploadError){
+            input.disabled = false;
+            input.value = '';
+            showToast(uploadError.message);
+            return;
+          }
+
+          const { data:publicAvatar } =
+            sb.storage
+              .from('avatars')
+              .getPublicUrl(avatarPath);
+
+          const avatarUrl =
+            `${publicAvatar.publicUrl}?v=${Date.now()}`;
+
+          const { error:updateError } =
+            await sb.rpc(
+              'set_character_avatar',
+              {
+                character_thread_id_input:characterId,
+                avatar_url_input:avatarUrl
+              }
+            );
+
+          if (updateError){
+            input.disabled = false;
+            input.value = '';
+            showToast(updateError.message);
+            return;
+          }
+
+          showToast('Character picture saved.');
+          await showProfile(profile.id, 'characters');
+        }
+      );
+    });
+
+  $all('[data-character-avatar-remove]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        async () => {
+          button.disabled = true;
+          const characterId = button.dataset.characterAvatarRemove;
+
+          const { error } = await sb.rpc(
+            'set_character_avatar',
+            {
+              character_thread_id_input:characterId,
+              avatar_url_input:null
+            }
+          );
+
+          if (error){
+            button.disabled = false;
+            showToast(error.message);
+            return;
+          }
+
+          await sb.storage
+            .from('avatars')
+            .remove([
+              `${currentUser.id}/characters/${characterId}`
+            ]);
+
+          showToast('Character picture removed.');
+          await showProfile(profile.id, 'characters');
         }
       );
     });
@@ -8379,7 +8625,7 @@ async function loadPosts(threadId, page = 1){
     await sb
       .from('posts')
       .select(
-        'id, author_id, character_thread_id, content, created_at, profiles(username, is_admin), character:threads!posts_character_thread_id_fkey(id, title)'
+        'id, author_id, character_thread_id, content, created_at, profiles(username, is_admin, avatar_url), character:threads!posts_character_thread_id_fkey(id, title, character_avatar_url)'
       )
       .eq(
         'thread_id',
@@ -8449,6 +8695,22 @@ async function loadPosts(threadId, page = 1){
               )
             );
 
+          const postingName =
+            p.character?.title ||
+            p.profiles?.username ||
+            'unknown';
+
+          const postingAvatar =
+            p.character?.title
+              ? p.character.character_avatar_url
+              : p.profiles?.avatar_url;
+
+          const postingInitial =
+            postingName
+              .trim()
+              .charAt(0)
+              .toUpperCase() || '?';
+
           return `
           <div
             class="post-card"
@@ -8458,6 +8720,19 @@ async function loadPosts(threadId, page = 1){
             <div class="post-head">
 
               <div class="post-author-wrap">
+                ${
+                  postingAvatar
+                    ? `<img
+                        class="post-avatar"
+                        src="${esc(postingAvatar)}"
+                        alt="${esc(postingName)}'s picture"
+                        data-avatar-fallback="${esc(postingInitial)}"
+                      >`
+                    : `<div class="post-avatar-fallback">
+                        ${esc(postingInitial)}
+                      </div>`
+                }
+
                 <div class="post-identity">
                   ${
                     p.character?.title
@@ -8582,6 +8857,21 @@ async function loadPosts(threadId, page = 1){
       }
     }
   );
+
+  $all('#posts-container .post-avatar[data-avatar-fallback]')
+    .forEach(image => {
+      image.addEventListener(
+        'error',
+        event => {
+          const fallback = document.createElement('div');
+          fallback.className = 'post-avatar-fallback';
+          fallback.textContent =
+            event.currentTarget.dataset.avatarFallback;
+          event.currentTarget.replaceWith(fallback);
+        },
+        { once:true }
+      );
+    });
 
   $all('[data-post-page]')
     .forEach(button => {
