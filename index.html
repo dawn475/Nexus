@@ -1798,6 +1798,64 @@
     text-underline-offset:2px;
   }
 
+  .bbcode-content ul,
+  .bbcode-content ol{
+    margin:10px 0;
+    padding-left:30px;
+    white-space:normal;
+  }
+
+  .bbcode-content li{
+    margin:4px 0;
+    white-space:pre-wrap;
+  }
+
+  .bbcode-indent{
+    margin-left:32px;
+  }
+
+  .bbcode-code{
+    display:block;
+    margin:12px 0;
+    padding:12px 14px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--void-soft);
+    color:var(--parchment-soft);
+    font-family:var(--mono);
+    font-size:12px;
+    line-height:1.6;
+    overflow:auto;
+    white-space:pre-wrap;
+  }
+
+  .bbcode-spoiler{
+    margin:12px 0;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--void-soft);
+  }
+
+  .bbcode-spoiler summary{
+    color:var(--accent-soft);
+    cursor:pointer;
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:.4px;
+  }
+
+  .bbcode-spoiler-content{
+    margin-top:10px;
+  }
+
+  .bbcode-video{
+    display:block;
+    width:100%;
+    max-width:760px;
+    margin:12px auto;
+  }
+
   .bbcode-image{
     display:block;
     max-width:100%;
@@ -3479,13 +3537,50 @@ function safePostUrl(value, imageOnly = false){
   return '';
 }
 
-function applyBbCode(html){
+function applyBbCode(html, inputIsEscaped = false){
+
+  const protectedBlocks = [];
+
+  const protectBlock = (pattern, render) => {
+    html = html.replace(
+      pattern,
+      (...args) => {
+        const token = `\uE000${protectedBlocks.length}\uE001`;
+        protectedBlocks.push(render(...args));
+        return token;
+      }
+    );
+  };
+
+  const safeLiteral = value =>
+    inputIsEscaped
+      ? value
+      : esc(value);
+
+  protectBlock(
+    /\[noparse\]([\s\S]*?)\[\/noparse\]/gi,
+    (_match, content) =>
+      `<span>${safeLiteral(content)}</span>`
+  );
+
+  [
+    ['code', 'Code'],
+    ['php', 'PHP'],
+    ['html', 'HTML']
+  ].forEach(([tag, label]) => {
+    protectBlock(
+      new RegExp(`\\[${tag}\\]([\\s\\S]*?)\\[\\/${tag}\\]`, 'gi'),
+      (_match, content) =>
+        `<pre class="bbcode-code"><code data-language="${label.toLowerCase()}">${safeLiteral(content)}</code></pre>`
+    );
+  });
 
   const pairedTags = [
     [/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>'],
     [/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>'],
     [/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>'],
     [/\[s\]([\s\S]*?)\[\/s\]/gi, '<s>$1</s>'],
+    [/\[indent\]([\s\S]*?)\[\/indent\]/gi, '<div class="bbcode-indent">$1</div>'],
     [
       /\[align=(left|center|right|justify)\]([\s\S]*?)\[\/align\]/gi,
       (_match, alignment, content) =>
@@ -3500,7 +3595,15 @@ function applyBbCode(html){
         `<blockquote><div class="quote-attribution">${author} wrote:</div>${content}</blockquote>`
     ],
     [/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote>$1</blockquote>'],
-    [/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre><code>$1</code></pre>']
+    [
+      /\[spoiler=([^\]\r\n]{1,80})\]([\s\S]*?)\[\/spoiler\]/gi,
+      (_match, label, content) =>
+        `<details class="bbcode-spoiler"><summary>${label}</summary><div class="bbcode-spoiler-content">${content}</div></details>`
+    ],
+    [
+      /\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi,
+      '<details class="bbcode-spoiler"><summary>Spoiler</summary><div class="bbcode-spoiler-content">$1</div></details>'
+    ]
   ];
 
   for (let pass = 0; pass < 5; pass += 1){
@@ -3547,6 +3650,27 @@ function applyBbCode(html){
   );
 
   html = html.replace(
+    /\[highlight=([^\]\r\n]+)\]([\s\S]*?)\[\/highlight\]/gi,
+    (match, color, body) => {
+      const safeColor = color.trim();
+
+      if (
+        !/^(?:#[0-9a-f]{3,8}|[a-z]{1,20}|(?:rgb|hsl)a?\([0-9.,%\s]+\))$/i
+          .test(safeColor)
+      ){
+        return body;
+      }
+
+      return `<mark style="background-color:${esc(safeColor)}">${body}</mark>`;
+    }
+  );
+
+  html = html.replace(
+    /\[highlight\]([\s\S]*?)\[\/highlight\]/gi,
+    '<mark>$1</mark>'
+  );
+
+  html = html.replace(
     /\[size=([1-7])\]([\s\S]*?)\[\/size\]/gi,
     (match, size, body) => {
 
@@ -3562,6 +3686,37 @@ function applyBbCode(html){
 
       return `<span style="font-size:${sizes[size]}">${body}</span>`;
     }
+  );
+
+  html = html.replace(
+    /\[font=([^\]\r\n]{1,80})\]([\s\S]*?)\[\/font\]/gi,
+    (match, font, body) => {
+      const safeFont = font.trim();
+
+      if (!/^[a-z0-9][a-z0-9 ,'-]{0,79}$/i.test(safeFont)){
+        return body;
+      }
+
+      return `<span style="font-family:${esc(safeFont)}">${body}</span>`;
+    }
+  );
+
+  html = html.replace(
+    /\[email=([^\]\r\n]+)\]([\s\S]*?)\[\/email\]/gi,
+    (match, address, label) => {
+      const email = address.trim();
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        ? `<a href="mailto:${esc(email)}">${label}</a>`
+        : label;
+    }
+  );
+
+  html = html.replace(
+    /\[email\]([^\[\]\s]+)\[\/email\]/gi,
+    (match, address) =>
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)
+        ? `<a href="mailto:${esc(address)}">${esc(address)}</a>`
+        : address
   );
 
   html = html.replace(
@@ -3607,6 +3762,101 @@ function applyBbCode(html){
 
       return `<img class="bbcode-image" src="${esc(url)}" alt="User-posted image" loading="lazy">`;
     }
+  );
+
+  for (let pass = 0; pass < 5; pass += 1){
+    const before = html;
+
+    html = html.replace(
+      /\[list(?:=([aAiI1]|disc|circle|square))?\]((?:(?!\[\/?list(?:=[^\]]+)?\]).)*)\[\/list\]/gis,
+      (match, type, body) => {
+        const items = body
+          .split(/\[\*\]/i)
+          .slice(1)
+          .map(item => item.trim())
+          .filter(Boolean);
+
+        if (!items.length){
+          return body;
+        }
+
+        const ordered = /^[aAiI1]$/.test(type || '');
+        const tag = ordered ? 'ol' : 'ul';
+        const attribute = ordered
+          ? ` type="${type}"`
+          : type
+            ? ` style="list-style-type:${type}"`
+            : '';
+
+        return `<${tag}${attribute}>${items.map(item => `<li>${item}</li>`).join('')}</${tag}>`;
+      }
+    );
+
+    if (html === before){
+      break;
+    }
+  }
+
+  const internalLink = (kind, value, label) => {
+    const id = value.trim();
+
+    if (!/^[a-z0-9-]{1,80}$/i.test(id)){
+      return label;
+    }
+
+    return `<a href="#" data-bb-${kind}="${esc(id)}">${label}</a>`;
+  };
+
+  html = html.replace(
+    /\[thread=([^\]\r\n]+)\]([\s\S]*?)\[\/thread\]/gi,
+    (match, id, label) => internalLink('thread', id, label)
+  );
+
+  html = html.replace(
+    /\[thread\]([^\[\]\s]+)\[\/thread\]/gi,
+    (match, id) => internalLink('thread', id, esc(id))
+  );
+
+  html = html.replace(
+    /\[post=([^\]\r\n]+)\]([\s\S]*?)\[\/post\]/gi,
+    (match, id, label) => internalLink('post', id, label)
+  );
+
+  html = html.replace(
+    /\[post\]([^\[\]\s]+)\[\/post\]/gi,
+    (match, id) => internalLink('post', id, esc(id))
+  );
+
+  html = html.replace(
+    /\[video(?:=[^\]\r\n]+)?\]([^\[\r\n]+)\[\/video\]/gi,
+    (match, value) => {
+      const url = safePostUrl(value, true);
+
+      if (!url){
+        return '';
+      }
+
+      if (/\.(?:mp4|webm|ogg)(?:[?#].*)?$/i.test(url)){
+        return `<video class="bbcode-video" controls preload="metadata" src="${esc(url)}"></video>`;
+      }
+
+      return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Watch video</a>`;
+    }
+  );
+
+  html = html.replace(
+    /\[attach(?:=[^\]\r\n]+)?\]([^\[\r\n]+)\[\/attach\]/gi,
+    (match, value) => {
+      const url = safePostUrl(value);
+      return url
+        ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View attachment</a>`
+        : value;
+    }
+  );
+
+  html = html.replace(
+    /\uE000(\d+)\uE001/g,
+    (match, index) => protectedBlocks[Number(index)] || ''
   );
 
   return html;
@@ -3670,7 +3920,8 @@ function renderBbCode(source){
 
   return sanitizePostHtml(
     applyBbCode(
-      esc(source)
+      esc(source),
+      true
     )
   );
 }
@@ -3863,6 +4114,20 @@ function renderPostContent(element, source, postId){
   element.replaceChildren(
     fragment
   );
+
+  element.querySelectorAll('[data-bb-thread]').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      showThread(link.dataset.bbThread);
+    });
+  });
+
+  element.querySelectorAll('[data-bb-post]').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      navigateToPost(link.dataset.bbPost);
+    });
+  });
 }
 
 function timeAgo(iso){
@@ -6065,10 +6330,10 @@ async function showThreadSearch(page = 1, searchTerm = ''){
   });
 }
 
-async function navigateToPost(postId, threadId){
+async function navigateToPost(postId, threadId = null){
   const { data:post, error } = await sb
     .from('posts')
-    .select('id, created_at')
+    .select('id, thread_id, created_at')
     .eq('id', postId)
     .single();
 
@@ -6077,14 +6342,17 @@ async function navigateToPost(postId, threadId){
     return;
   }
 
+  const destinationThreadId =
+    threadId || post.thread_id;
+
   const { count } = await sb
     .from('posts')
     .select('id', { count:'exact', head:true })
-    .eq('thread_id', threadId)
+    .eq('thread_id', destinationThreadId)
     .lte('created_at', post.created_at);
 
   const page = Math.max(1, Math.ceil((count || 1) / POST_PAGE_SIZE));
-  await showThread(threadId, page);
+  await showThread(destinationThreadId, page);
 
   const card = document.querySelector(
     `.post-card[data-post-id="${postId}"]`
