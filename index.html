@@ -3770,10 +3770,17 @@ function applyBbCode(html, inputIsEscaped = false){
     html = html.replace(
       /\[list(?:=([aAiI1]|disc|circle|square))?\]((?:(?!\[\/?list(?:=[^\]]+)?\]).)*)\[\/list\]/gis,
       (match, type, body) => {
-        const items = body
-          .split(/\[\*\]/i)
-          .slice(1)
+        const hasItemMarkers =
+          /\[\*\]/i.test(body);
+
+        const items = (
+          hasItemMarkers
+            ? body.split(/\[\*\]/i).slice(1)
+            : body.split(/\r?\n/)
+        )
           .map(item => item.trim())
+          .map(item => item.replace(/\[\/\*\]\s*$/i, '').trim())
+          .map(item => item.replace(/^(?:[-•]|\d+[.)])\s+/, ''))
           .filter(Boolean);
 
         if (!items.length){
