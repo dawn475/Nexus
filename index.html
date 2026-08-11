@@ -862,6 +862,12 @@
     font-size:11px;
   }
 
+  .lock-badge{
+    flex-shrink:0;
+    color:var(--gold-bright);
+    font-size:11px;
+  }
+
   .thread-meta{
     flex-shrink:0;
 
@@ -874,6 +880,59 @@
   }
 
   /* ---------- posts ---------- */
+
+  .thread-heading{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:9px;
+  }
+
+  .thread-state-badge{
+    padding:4px 8px;
+    border:1px solid var(--gold);
+    border-radius:999px;
+    color:var(--gold-bright);
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+  }
+
+  .thread-moderation{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+    gap:8px;
+  }
+
+  .thread-moderation select{
+    min-height:42px;
+    max-width:240px;
+    padding:9px 30px 9px 11px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--panel-raised);
+    color:var(--parchment);
+    font-family:var(--body);
+    font-size:12px;
+  }
+
+  .thread-lock-notice{
+    margin:-8px 0 24px;
+    padding:13px 15px;
+    border:1px solid rgba(181,154,112,.35);
+    border-radius:var(--radius);
+    background:rgba(181,154,112,.08);
+    color:var(--muted-light);
+    font-size:12px;
+    line-height:1.6;
+  }
+
+  .thread-lock-notice strong{
+    color:var(--gold-bright);
+  }
 
   .back-link{
     margin-bottom:18px;
@@ -1544,6 +1603,17 @@
     .thread-title{
       white-space:normal;
       font-size:18px;
+    }
+
+    .thread-moderation{
+      width:100%;
+      justify-content:flex-start;
+    }
+
+    .thread-moderation select{
+      flex:1 1 100%;
+      max-width:none;
+      font-size:16px;
     }
 
     .board-card{
@@ -3231,7 +3301,7 @@ async function showThreadList(boardId){
     await sb
       .from('threads')
       .select(
-        'id, title, pinned, created_at, profiles(username)'
+        'id, title, pinned, locked, created_at, profiles(username)'
       )
       .eq(
         'board_id',
@@ -3289,6 +3359,12 @@ async function showThreadList(boardId){
               ${
                 t.pinned
                   ? '<span class="pin-badge">◆</span>'
+                  : ''
+              }
+
+              ${
+                t.locked
+                  ? '<span class="lock-badge" title="Locked thread">🔒</span>'
                   : ''
               }
 
@@ -3461,38 +3537,11 @@ async function showThread(threadId){
       class="page-header"
     ></div>
 
+    <div id="thread-state"></div>
+
     <div id="posts-container"></div>
 
-    <div class="composer">
-
-      <label
-        class="hint"
-        for="reply-box"
-      >
-        Reply to this thread
-      </label>
-
-      <textarea
-        id="reply-box"
-        placeholder="Write your reply... BBCode and [dohtml] templates are supported."
-      ></textarea>
-
-      <div class="composer-foot">
-
-        <span class="hint">
-          BBCode and [dohtml] templates are supported. Posts under 15 characters don't earn coin.
-        </span>
-
-        <button
-          class="btn btn-gold"
-          id="reply-submit"
-        >
-          Post Reply
-        </button>
-
-      </div>
-
-    </div>
+    <div id="thread-composer"></div>
   `);
 
   $('#back-to-threads')
@@ -3505,12 +3554,13 @@ async function showThread(threadId){
     );
 
   const {
-    data:thread
+    data:thread,
+    error:threadError
   } =
     await sb
       .from('threads')
       .select(
-        'title, locked'
+        'title, locked, board_id'
       )
       .eq(
         'id',
@@ -3518,20 +3568,286 @@ async function showThread(threadId){
       )
       .single();
 
+  if (threadError || !thread){
+
+    showToast(
+      threadError?.message ||
+      'Thread not found.'
+    );
+
+    showThreadList(
+      currentBoardId
+    );
+
+    return;
+  }
+
+  currentBoardId =
+    thread.board_id;
+
+  const isAdmin =
+    currentProfile?.is_admin === true;
+
+  const boardOptions =
+    boards
+      .map(
+        board => `
+          <option
+            value="${board.id}"
+            ${
+              board.id === thread.board_id
+                ? 'selected'
+                : ''
+            }
+          >
+            ${esc(board.name)}
+          </option>
+        `
+      )
+      .join('');
+
   $('#thread-header').innerHTML =
-    `<h2>
-      ${esc(
-        thread?.title ||
-        ''
-      )}
-    </h2>`;
+    `<div class="thread-heading">
+
+      <h2>
+        ${esc(thread.title)}
+      </h2>
+
+      ${
+        thread.locked
+          ? '<span class="thread-state-badge">Locked</span>'
+          : ''
+      }
+
+    </div>
+
+    ${
+      isAdmin
+        ? `
+          <div class="thread-moderation">
+
+            <select
+              id="thread-move-board"
+              aria-label="Move thread to another board"
+            >
+              ${boardOptions}
+            </select>
+
+            <button
+              class="btn btn-ghost"
+              id="thread-move-submit"
+            >
+              Move Thread
+            </button>
+
+            <button
+              class="btn ${
+                thread.locked
+                  ? 'btn-ghost'
+                  : 'btn-danger'
+              }"
+              id="thread-lock-toggle"
+            >
+              ${
+                thread.locked
+                  ? 'Unlock Thread'
+                  : 'Lock Thread'
+              }
+            </button>
+
+          </div>
+        `
+        : ''
+    }`;
+
+  if (thread.locked){
+
+    $('#thread-state').innerHTML =
+      `<div class="thread-lock-notice">
+        <strong>🔒 This thread is locked.</strong>
+        ${
+          isAdmin
+            ? 'Members can read it, while admins may still reply or unlock it.'
+            : 'It remains available to read, but new replies are closed.'
+        }
+      </div>`;
+  }
 
   await loadPosts(
     threadId
   );
 
+  if (!thread.locked || isAdmin){
+
+    $('#thread-composer').innerHTML = `
+      <div class="composer">
+
+        <label
+          class="hint"
+          for="reply-box"
+        >
+          Reply to this thread
+        </label>
+
+        <textarea
+          id="reply-box"
+          placeholder="Write your reply... BBCode and [dohtml] templates are supported."
+        ></textarea>
+
+        <div class="composer-foot">
+
+          <span class="hint">
+            BBCode and [dohtml] templates are supported. Posts under 15 characters don't earn coin.
+          </span>
+
+          <button
+            class="btn btn-gold"
+            id="reply-submit"
+          >
+            Post Reply
+          </button>
+
+        </div>
+
+      </div>
+    `;
+  }
+
+  if (isAdmin){
+
+    $('#thread-move-submit')
+      .addEventListener(
+        'click',
+        async () => {
+
+          const targetBoardId =
+            Number(
+              $('#thread-move-board')
+                .value
+            );
+
+          if (
+            !Number.isInteger(targetBoardId) ||
+            targetBoardId === thread.board_id
+          ){
+
+            showToast(
+              'Choose a different board.'
+            );
+
+            return;
+          }
+
+          const moveButton =
+            $('#thread-move-submit');
+
+          moveButton.disabled =
+            true;
+
+          const {
+            data:movedThread,
+            error:moveError
+          } =
+            await sb
+              .from('threads')
+              .update({
+                board_id:
+                  targetBoardId
+              })
+              .eq(
+                'id',
+                threadId
+              )
+              .select(
+                'board_id'
+              )
+              .single();
+
+          if (moveError){
+
+            moveButton.disabled =
+              false;
+
+            showToast(
+              moveError.message
+            );
+
+            return;
+          }
+
+          currentBoardId =
+            movedThread.board_id;
+
+          showToast(
+            'Thread moved.'
+          );
+
+          await showThread(
+            threadId
+          );
+        }
+      );
+
+    $('#thread-lock-toggle')
+      .addEventListener(
+        'click',
+        async () => {
+
+          const lockButton =
+            $('#thread-lock-toggle');
+
+          lockButton.disabled =
+            true;
+
+          const nextLocked =
+            !thread.locked;
+
+          const {
+            data:lockedThread,
+            error:lockError
+          } =
+            await sb
+              .from('threads')
+              .update({
+                locked:
+                  nextLocked
+              })
+              .eq(
+                'id',
+                threadId
+              )
+              .select(
+                'locked'
+              )
+              .single();
+
+          if (lockError){
+
+            lockButton.disabled =
+              false;
+
+            showToast(
+              lockError.message
+            );
+
+            return;
+          }
+
+          showToast(
+            lockedThread.locked
+              ? 'Thread locked.'
+              : 'Thread unlocked.'
+          );
+
+          await showThread(
+            threadId
+          );
+        }
+      );
+  }
+
   $('#reply-submit')
-    .addEventListener(
+    ?.addEventListener(
       'click',
       async () => {
 
