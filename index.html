@@ -893,6 +893,22 @@
     background:var(--panel-raised);
   }
 
+  .thread-row.unread{
+    border-color:rgba(169,77,85,.48);
+    background:
+      linear-gradient(90deg, rgba(169,77,85,.09), transparent 42%),
+      var(--panel);
+  }
+
+  .unread-dot{
+    flex:0 0 8px;
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0 3px rgba(169,77,85,.12);
+  }
+
   .thread-main{
     display:flex;
     align-items:center;
@@ -938,6 +954,10 @@
     font-size:10px;
 
     white-space:nowrap;
+  }
+
+  .thread-meta-detail{
+    color:var(--muted-light);
   }
 
   .search-form{
@@ -1149,6 +1169,32 @@
     align-items:center;
     flex-wrap:wrap;
     gap:8px;
+  }
+
+  .post-identity{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:2px;
+  }
+
+  .post-character{
+    color:var(--accent-soft);
+    font-family:var(--display);
+    font-size:19px;
+    font-weight:600;
+  }
+
+  .post-account{
+    border:0;
+    background:none;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:9px;
+  }
+
+  .post-account:hover{
+    color:var(--accent-soft);
   }
 
   .post-meta-wrap,
@@ -1464,12 +1510,31 @@
     margin-top:28px;
   }
 
+  .posting-as-control{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    margin:0 0 10px;
+  }
+
+  .posting-as-control label{
+    flex:0 0 auto;
+  }
+
+  .posting-as-control select{
+    width:min(100%, 300px);
+  }
+
   .composer-foot{
     display:flex;
     align-items:center;
     justify-content:space-between;
 
     margin-top:10px;
+  }
+
+  .draft-status{
+    color:var(--success);
   }
 
   .hint{
@@ -2641,12 +2706,31 @@
 
     <div class="field">
 
+      <label for="new-thread-character">Posting as</label>
+
+      <select id="new-thread-character">
+        <option value="">Account</option>
+      </select>
+
+      <span class="hint">
+        Approved characters connected to your account appear here.
+      </span>
+
+    </div>
+
+    <div class="field">
+
       <label>Opening post</label>
 
       <textarea
         id="new-thread-content"
         placeholder="Write the opening post... BBCode and [dohtml] templates are supported."
       ></textarea>
+
+      <span
+        class="hint draft-status"
+        id="new-thread-draft-status"
+      ></span>
 
     </div>
 
@@ -2911,6 +2995,7 @@ let notificationChannel = null;
 const THREAD_PAGE_SIZE = 25;
 const POST_PAGE_SIZE = 10;
 const DIRECTORY_PAGE_SIZE = 20;
+const DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
 let passwordRecoveryActive =
   (
@@ -3468,6 +3553,193 @@ function paginationHtml(page, totalPages, attribute){
       </button>
     </nav>
   `;
+}
+
+async function loadPostingCharacters(){
+  if (!currentUser){
+    return [];
+  }
+
+  const { data, error } = await sb
+    .from('threads')
+    .select('id, title')
+    .eq('author_id', currentUser.id)
+    .eq('is_approved_character', true)
+    .order('title', { ascending:true });
+
+  if (error){
+    console.error(error);
+    return [];
+  }
+
+  return data || [];
+}
+
+function postingCharacterOptions(
+  characters,
+  selectedId = ''
+){
+  const accountLabel = currentProfile?.username
+    ? `Account — ${currentProfile.username}`
+    : 'Account';
+
+  return `
+    <option value="" ${selectedId ? '' : 'selected'}>
+      ${esc(accountLabel)}
+    </option>
+    ${(characters || []).map(character => `
+      <option
+        value="${character.id}"
+        ${character.id === selectedId ? 'selected' : ''}
+      >
+        ${esc(character.title)}
+      </option>
+    `).join('')}
+  `;
+}
+
+function draftStorageKey(kind, contextId){
+  return `nexus-draft:${currentUser?.id || 'guest'}:${kind}:${contextId}`;
+}
+
+function readDraft(kind, contextId){
+  try {
+    const key = draftStorageKey(kind, contextId);
+    const raw = localStorage.getItem(key);
+
+    if (!raw){
+      return null;
+    }
+
+    const draft = JSON.parse(raw);
+
+    if (
+      !draft?.saved_at ||
+      Date.now() - draft.saved_at > DRAFT_MAX_AGE
+    ){
+      localStorage.removeItem(key);
+      return null;
+    }
+
+    return draft.value || null;
+  } catch (error){
+    console.warn('Draft could not be restored.', error);
+    return null;
+  }
+}
+
+function writeDraft(kind, contextId, value){
+  try {
+    localStorage.setItem(
+      draftStorageKey(kind, contextId),
+      JSON.stringify({
+        saved_at:Date.now(),
+        value
+      })
+    );
+    return true;
+  } catch (error){
+    console.warn('Draft could not be saved.', error);
+    return false;
+  }
+}
+
+function clearDraft(kind, contextId){
+  try {
+    localStorage.removeItem(
+      draftStorageKey(kind, contextId)
+    );
+  } catch (error){
+    console.warn('Draft could not be cleared.', error);
+  }
+}
+
+function saveNewThreadDraft(){
+  if (!currentUser || currentBoardId === null){
+    return;
+  }
+
+  const title = $('#new-thread-title').value;
+  const content = $('#new-thread-content').value;
+  const characterThreadId =
+    $('#new-thread-character')?.value || null;
+
+  if (!title && !content && !characterThreadId){
+    clearDraft('new-thread', currentBoardId);
+    $('#new-thread-draft-status').textContent = '';
+    return;
+  }
+
+  const saved = writeDraft(
+    'new-thread',
+    currentBoardId,
+    { title, content, characterThreadId }
+  );
+
+  $('#new-thread-draft-status').textContent = saved
+    ? 'Draft saved locally.'
+    : 'Draft could not be saved.';
+}
+
+function saveReplyDraft(threadId, content){
+  const characterThreadId =
+    $('#reply-character')?.value || null;
+
+  if (!content && !characterThreadId){
+    clearDraft('reply', threadId);
+    $('#reply-draft-status').textContent = '';
+    return;
+  }
+
+  const saved = writeDraft(
+    'reply',
+    threadId,
+    { content, characterThreadId }
+  );
+  $('#reply-draft-status').textContent = saved
+    ? 'Draft saved locally.'
+    : 'Draft could not be saved.';
+}
+
+async function markThreadRead(threadId){
+  if (!currentUser){
+    return;
+  }
+
+  const { data:existingReads, error:readError } = await sb
+    .from('thread_reads')
+    .select('thread_id')
+    .eq('user_id', currentUser.id)
+    .eq('thread_id', threadId)
+    .limit(1);
+
+  if (readError){
+    console.error(readError);
+    return;
+  }
+
+  const lastReadAt =
+    new Date().toISOString();
+
+  const readRequest = existingReads?.length
+    ? sb
+        .from('thread_reads')
+        .update({ last_read_at:lastReadAt })
+        .eq('user_id', currentUser.id)
+        .eq('thread_id', threadId)
+    : sb
+        .from('thread_reads')
+        .insert({
+          user_id:currentUser.id,
+          thread_id:threadId,
+          last_read_at:lastReadAt
+        });
+
+  const { error } = await readRequest;
+
+  if (error){
+    console.error(error);
+  }
 }
 
 async function refreshNotificationCount(){
@@ -4841,9 +5113,12 @@ async function showThreadSearch(page = 1, searchTerm = ''){
         board_id,
         title,
         locked,
+        reply_count,
+        last_post_at,
         created_at,
         boards(name),
-        author:profiles!threads_author_id_fkey(username, is_admin)
+        author:profiles!threads_author_id_fkey(username, is_admin),
+        last_poster:profiles!threads_last_poster_id_fkey(username)
       `,
       { count:'exact' }
     )
@@ -4851,6 +5126,7 @@ async function showThreadSearch(page = 1, searchTerm = ''){
       config:'simple',
       type:'websearch'
     })
+    .order('last_post_at', { ascending:false, nullsFirst:false })
     .order('created_at', { ascending:false })
     .order('id', { ascending:false })
     .range(from, to);
@@ -4892,8 +5168,10 @@ async function showThreadSearch(page = 1, searchTerm = ''){
 
         <span class="thread-meta">
           ${esc(thread.boards?.name || 'Unknown board')}
-          · ${esc(thread.author?.username || 'unknown')}
-          · ${timeAgo(thread.created_at)}
+          · ${thread.reply_count || 0}
+          ${(thread.reply_count || 0) === 1 ? 'reply' : 'replies'}
+          · last by ${esc(thread.last_poster?.username || thread.author?.username || 'unknown')}
+          · ${timeAgo(thread.last_post_at || thread.created_at)}
         </span>
       </button>
     `).join('')}
@@ -5045,7 +5323,9 @@ async function showNotifications(page = 1){
       const title = notification.threads?.title || 'a thread';
       const message = notification.type === 'mention'
         ? `${actor} mentioned you in “${title}”.`
-        : `${actor} replied to your thread “${title}”.`;
+        : notification.type === 'followed_reply'
+          ? `${actor} replied to a thread you follow: “${title}”.`
+          : `${actor} replied to your thread “${title}”.`;
 
       return `
         <button
@@ -5820,7 +6100,7 @@ async function showThreadList(boardId, page = 1){
     await sb
       .from('threads')
       .select(
-        'id, title, author_id, pinned, locked, is_approved_character, created_at, author:profiles!threads_author_id_fkey(username, is_admin)',
+        'id, title, author_id, pinned, locked, is_approved_character, reply_count, last_post_at, last_poster_id, created_at, author:profiles!threads_author_id_fkey(username, is_admin), last_poster:profiles!threads_last_poster_id_fkey(username)',
         { count:'exact' }
       )
       .eq(
@@ -5834,11 +6114,13 @@ async function showThreadList(boardId, page = 1){
         }
       )
       .order(
-        'created_at',
+        'last_post_at',
         {
-          ascending:false
+          ascending:false,
+          nullsFirst:false
         }
       )
+      .order('created_at', { ascending:false })
       .order(
         'id',
         {
@@ -5882,16 +6164,43 @@ async function showThreadList(boardId, page = 1){
     return;
   }
 
+  const { data:readRows, error:readError } = await sb
+    .from('thread_reads')
+    .select('thread_id, last_read_at')
+    .in('thread_id', data.map(thread => thread.id));
+
+  const readsByThread = new Map(
+    (readError ? [] : readRows || [])
+      .map(read => [read.thread_id, read.last_read_at])
+  );
+
   container.innerHTML =
     data
       .map(
-        t => `
+        t => {
+          const lastActivity =
+            t.last_post_at || t.created_at;
+
+          const lastRead =
+            readsByThread.get(t.id);
+
+          const isUnread =
+            !lastRead ||
+            new Date(lastActivity) > new Date(lastRead);
+
+          return `
           <button
-            class="thread-row"
+            class="thread-row ${isUnread ? 'unread' : ''}"
             data-thread="${t.id}"
           >
 
             <div class="thread-main">
+
+              ${
+                isUnread
+                  ? '<span class="unread-dot" title="Unread activity"></span>'
+                  : ''
+              }
 
               ${
                 t.pinned
@@ -5934,13 +6243,17 @@ async function showThreadList(boardId, page = 1){
                   : ''
               }
               ·
-              ${timeAgo(
-                t.created_at
-              )}
+              <span class="thread-meta-detail">
+                ${t.reply_count || 0}
+                ${(t.reply_count || 0) === 1 ? 'reply' : 'replies'}
+                · last by ${esc(t.last_poster?.username || t.author?.username || 'unknown')}
+                · ${timeAgo(lastActivity)}
+              </span>
             </span>
 
           </button>
-        `
+        `;
+        }
       )
       .join('') +
     paginationHtml(
@@ -6002,18 +6315,46 @@ async function showThreadList(boardId, page = 1){
     });
 }
 
-function openNewThreadModal(){
+async function openNewThreadModal(){
+
+  const draft = readDraft(
+    'new-thread',
+    currentBoardId
+  );
+
+  const characterSelect =
+    $('#new-thread-character');
+
+  characterSelect.disabled = true;
+  characterSelect.innerHTML =
+    postingCharacterOptions([], '');
 
   $('#new-thread-title').value =
-    '';
+    draft?.title || '';
 
   $('#new-thread-content').value =
-    '';
+    draft?.content || '';
+
+  $('#new-thread-draft-status').textContent =
+    draft
+      ? 'Draft restored from this device.'
+      : '';
 
   $('#new-thread-backdrop')
     .classList.add(
       'visible'
     );
+
+  const characters =
+    await loadPostingCharacters();
+
+  characterSelect.innerHTML =
+    postingCharacterOptions(
+      characters,
+      draft?.characterThreadId || ''
+    );
+
+  characterSelect.disabled = false;
 }
 
 $('#new-thread-cancel')
@@ -6043,6 +6384,9 @@ $('#new-thread-submit')
         $('#new-thread-content')
           .value
           .trim();
+
+      const characterThreadId =
+        $('#new-thread-character').value || null;
 
       if (!title || !content){
 
@@ -6088,7 +6432,9 @@ $('#new-thread-submit')
               thread.id,
             author_id:
               currentUser.id,
-            content
+            content,
+            character_thread_id:
+              characterThreadId
           });
 
       if (postErr){
@@ -6099,6 +6445,11 @@ $('#new-thread-submit')
 
         return;
       }
+
+      clearDraft(
+        'new-thread',
+        currentBoardId
+      );
 
       $('#new-thread-backdrop')
         .classList.remove(
@@ -6197,6 +6548,22 @@ async function showThread(threadId, postPage = 1){
       !thread.locked
     );
 
+  const [
+    followResult,
+    postingCharacters
+  ] = await Promise.all([
+    sb
+      .from('thread_follows')
+      .select('thread_id')
+      .eq('user_id', currentUser.id)
+      .eq('thread_id', threadId)
+      .limit(1),
+    loadPostingCharacters()
+  ]);
+
+  const isFollowing =
+    Boolean(followResult.data?.length);
+
   const boardOptions =
     boards
       .map(
@@ -6237,10 +6604,17 @@ async function showThread(threadId, postPage = 1){
     </div>
 
     ${
-      canEditThread ||
-      thread.author_id !== currentUser.id
+      currentUser
         ? `
           <div class="thread-moderation">
+
+            <button
+              class="btn ${isFollowing ? 'btn-gold' : 'btn-ghost'}"
+              id="thread-follow-toggle"
+              type="button"
+            >
+              ${isFollowing ? 'Following' : 'Follow Thread'}
+            </button>
 
             ${
               thread.author_id !== currentUser.id
@@ -6361,10 +6735,68 @@ async function showThread(threadId, postPage = 1){
       })
     );
 
+  $('#thread-follow-toggle')
+    ?.addEventListener(
+      'click',
+      async event => {
+        event.currentTarget.disabled = true;
+
+        const followRequest = isFollowing
+          ? sb
+              .from('thread_follows')
+              .delete()
+              .eq('user_id', currentUser.id)
+              .eq('thread_id', threadId)
+          : sb
+              .from('thread_follows')
+              .insert({
+                user_id:currentUser.id,
+                thread_id:threadId
+              });
+
+        const { error } = await followRequest;
+
+        if (error){
+          event.currentTarget.disabled = false;
+          showToast('Thread follow could not be updated.');
+          return;
+        }
+
+        showToast(
+          isFollowing
+            ? 'Thread unfollowed.'
+            : 'Thread followed. New replies will notify you.'
+        );
+
+        await showThread(threadId, currentPostPage);
+      }
+    );
+
   if (!thread.locked || isAdmin){
+
+    const replyDraft = readDraft(
+      'reply',
+      threadId
+    );
 
     $('#thread-composer').innerHTML = `
       <div class="composer">
+
+        <div class="posting-as-control">
+          <label
+            class="hint"
+            for="reply-character"
+          >
+            Posting as
+          </label>
+
+          <select id="reply-character">
+            ${postingCharacterOptions(
+              postingCharacters,
+              replyDraft?.characterThreadId || ''
+            )}
+          </select>
+        </div>
 
         <label
           class="hint"
@@ -6384,6 +6816,11 @@ async function showThread(threadId, postPage = 1){
             BBCode and [dohtml] are supported. Use @username to mention someone. Posts under 15 characters don't earn coin.
           </span>
 
+          <span
+            class="hint draft-status"
+            id="reply-draft-status"
+          ></span>
+
           <button
             class="btn btn-gold"
             id="reply-submit"
@@ -6395,6 +6832,32 @@ async function showThread(threadId, postPage = 1){
 
       </div>
     `;
+
+    if (replyDraft?.content){
+      $('#reply-box').value =
+        replyDraft.content;
+    }
+
+    if (replyDraft){
+      $('#reply-draft-status').textContent =
+        'Draft restored from this device.';
+    }
+
+    $('#reply-box').addEventListener(
+      'input',
+      event => saveReplyDraft(
+        threadId,
+        event.currentTarget.value
+      )
+    );
+
+    $('#reply-character').addEventListener(
+      'change',
+      () => saveReplyDraft(
+        threadId,
+        $('#reply-box').value
+      )
+    );
   }
 
   $('#thread-title-edit')
@@ -6704,6 +7167,9 @@ async function showThread(threadId, postPage = 1){
             .value
             .trim();
 
+        const characterThreadId =
+          $('#reply-character')?.value || null;
+
         if (!content){
 
           showToast(
@@ -6723,7 +7189,9 @@ async function showThread(threadId, postPage = 1){
                 threadId,
               author_id:
                 currentUser.id,
-              content
+              content,
+              character_thread_id:
+                characterThreadId
             });
 
         if (error){
@@ -6736,6 +7204,11 @@ async function showThread(threadId, postPage = 1){
         }
 
         $('#reply-box').value =
+          '';
+
+        clearDraft('reply', threadId);
+
+        $('#reply-draft-status').textContent =
           '';
 
         await refreshCurrency();
@@ -6791,7 +7264,7 @@ async function loadPosts(threadId, page = 1){
     await sb
       .from('posts')
       .select(
-        'id, author_id, content, created_at, profiles(username, is_admin)'
+        'id, author_id, character_thread_id, content, created_at, profiles(username, is_admin), character:threads!posts_character_thread_id_fkey(id, title)'
       )
       .eq(
         'thread_id',
@@ -6861,16 +7334,24 @@ async function loadPosts(threadId, page = 1){
             <div class="post-head">
 
               <div class="post-author-wrap">
-                <button
-                  class="post-author profile-link"
-                  data-profile-id="${p.author_id}"
-                  type="button"
-                >
-                  ${esc(
-                    p.profiles?.username ||
-                    'unknown'
-                  )}
-                </button>
+                <div class="post-identity">
+                  ${
+                    p.character?.title
+                      ? `<span class="post-character">${esc(p.character.title)}</span>`
+                      : ''
+                  }
+
+                  <button
+                    class="${p.character?.title ? 'post-account' : 'post-author'} profile-link"
+                    data-profile-id="${p.author_id}"
+                    type="button"
+                  >
+                    ${p.character?.title ? 'played by ' : ''}${esc(
+                      p.profiles?.username ||
+                      'unknown'
+                    )}
+                  </button>
+                </div>
 
                 ${
                   p.profiles?.is_admin
@@ -7030,6 +7511,7 @@ async function loadPosts(threadId, page = 1){
 
           const author =
             (
+              post.character?.title ||
               post.profiles?.username ||
               'Unknown member'
             )
@@ -7051,6 +7533,11 @@ async function loadPosts(threadId, page = 1){
             replyBox.value.slice(0, start) +
             quote +
             replyBox.value.slice(end);
+
+          saveReplyDraft(
+            threadId,
+            replyBox.value
+          );
 
           const cursor =
             start + quote.length;
@@ -7086,7 +7573,7 @@ async function loadPosts(threadId, page = 1){
           openReportModal({
             type:'post',
             id:post.id,
-            label:`Post by ${post.profiles?.username || 'unknown member'}`
+            label:`Post by ${post.character?.title || post.profiles?.username || 'unknown member'}`
           });
         }
       );
@@ -7255,6 +7742,8 @@ async function loadPosts(threadId, page = 1){
         }
       );
     });
+
+  await markThreadRead(threadId);
 }
 
 /* ============================================================
@@ -7561,6 +8050,24 @@ function wireAdminStore(){
     }
   );
 }
+
+$('#new-thread-title')
+  .addEventListener(
+    'input',
+    saveNewThreadDraft
+  );
+
+$('#new-thread-content')
+  .addEventListener(
+    'input',
+    saveNewThreadDraft
+  );
+
+$('#new-thread-character')
+  .addEventListener(
+    'change',
+    saveNewThreadDraft
+  );
 
 /* ============================================================
    INVENTORY
