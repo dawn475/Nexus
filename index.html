@@ -3486,6 +3486,11 @@ function applyBbCode(html){
     [/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>'],
     [/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>'],
     [/\[s\]([\s\S]*?)\[\/s\]/gi, '<s>$1</s>'],
+    [
+      /\[align=(left|center|right|justify)\]([\s\S]*?)\[\/align\]/gi,
+      (_match, alignment, content) =>
+        `<div style="text-align:${alignment.toLowerCase()}">${content}</div>`
+    ],
     [/\[center\]([\s\S]*?)\[\/center\]/gi, '<div style="text-align:center">$1</div>'],
     [/\[left\]([\s\S]*?)\[\/left\]/gi, '<div style="text-align:left">$1</div>'],
     [/\[right\]([\s\S]*?)\[\/right\]/gi, '<div style="text-align:right">$1</div>'],
@@ -6718,6 +6723,14 @@ function boardPostingMode(board){
   return board?.posting_mode || 'open';
 }
 
+function isCharacterApprovalBoard(board){
+  return (
+    board?.name || ''
+  )
+    .trim()
+    .toLowerCase() === 'world of the living';
+}
+
 function boardModeOptions(selected = 'open'){
   return Object
     .entries(BOARD_POSTING_MODES)
@@ -8006,16 +8019,21 @@ async function showThread(threadId, postPage = 1){
                     }
                   </button>
 
-                  <button
-                    class="btn btn-ghost"
-                    id="thread-character-toggle"
-                  >
-                    ${
-                      thread.is_approved_character
-                        ? 'Remove Character Approval'
-                        : 'Approve Character'
-                    }
-                  </button>
+                  ${
+                    thread.is_approved_character ||
+                    isCharacterApprovalBoard(threadBoard)
+                      ? `<button
+                          class="btn btn-ghost"
+                          id="thread-character-toggle"
+                        >
+                          ${
+                            thread.is_approved_character
+                              ? 'Remove Character Approval'
+                              : 'Approve Character'
+                          }
+                        </button>`
+                      : ''
+                  }
                 `
                 : ''
             }
@@ -8455,7 +8473,7 @@ async function showThread(threadId, postPage = 1){
       );
 
     $('#thread-character-toggle')
-      .addEventListener(
+      ?.addEventListener(
         'click',
         async () => {
 
