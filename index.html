@@ -961,6 +961,183 @@
     border-color:#6f8fc2;
   }
 
+  .home-updates{
+    margin-bottom:26px;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius-large);
+    background:var(--panel);
+    overflow:hidden;
+    box-shadow:var(--shadow-soft);
+  }
+
+  .home-update-tabs{
+    display:flex;
+    border-bottom:1px solid var(--line-soft);
+    background:var(--void-soft);
+  }
+
+  .home-update-tab{
+    flex:1;
+    padding:13px 18px;
+    border:0;
+    border-bottom:2px solid transparent;
+    background:transparent;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:1.4px;
+  }
+
+  .home-update-tab.active{
+    border-bottom-color:var(--accent-soft);
+    color:var(--parchment);
+    background:var(--panel);
+  }
+
+  .home-update-body{
+    padding:23px;
+  }
+
+  .weather-hero{
+    position:relative;
+    min-height:115px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    padding:22px;
+    border-radius:var(--radius);
+    background:
+      linear-gradient(rgba(10,8,9,.25), rgba(10,8,9,.82)),
+      var(--panel-raised);
+    background-position:center;
+    background-size:cover;
+    text-align:center;
+    overflow:hidden;
+  }
+
+  .weather-hero::after{
+    content:'';
+    position:absolute;
+    inset:0;
+    background:linear-gradient(rgba(10,8,9,.12), rgba(10,8,9,.82));
+  }
+
+  .weather-hero img{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+  }
+
+  .weather-hero h3{
+    position:relative;
+    z-index:1;
+    margin:0;
+    color:#fff;
+    font-family:var(--display);
+    font-size:30px;
+    text-shadow:0 2px 8px #000;
+  }
+
+  .weather-meta{
+    display:flex;
+    justify-content:center;
+    flex-wrap:wrap;
+    gap:9px 22px;
+    margin:19px 0;
+    color:var(--parchment);
+    font-family:var(--display);
+    font-size:18px;
+  }
+
+  .weather-summary{
+    margin:0 auto 16px;
+    max-width:760px;
+    color:var(--accent-soft);
+    text-align:center;
+    font-size:15px;
+  }
+
+  .weather-details,
+  .announcement-content{
+    color:var(--muted-light);
+    line-height:1.75;
+  }
+
+  .announcement-item{
+    padding:0 0 19px;
+    margin-bottom:19px;
+    border-bottom:1px solid var(--line-soft);
+  }
+
+  .announcement-item:last-child{
+    margin-bottom:0;
+    border-bottom:0;
+  }
+
+  .announcement-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:7px;
+  }
+
+  .announcement-head h3{
+    margin:0;
+    color:var(--accent-soft);
+    font-family:var(--display);
+    font-size:21px;
+  }
+
+  .announcement-date{
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:9px;
+  }
+
+  .home-admin-editor{
+    margin-top:23px;
+    padding-top:20px;
+    border-top:1px solid var(--line-soft);
+  }
+
+  .home-admin-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:12px;
+  }
+
+  .board-access-list{
+    display:grid;
+    gap:8px;
+    width:100%;
+    margin-top:16px;
+  }
+
+  .board-access-row{
+    display:grid;
+    grid-template-columns:minmax(130px,1fr) minmax(190px,1fr) auto;
+    gap:9px;
+    align-items:center;
+  }
+
+  .board-access-badge{
+    display:inline-flex;
+    width:max-content;
+    margin-top:8px;
+    padding:4px 7px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:8px;
+    text-transform:uppercase;
+    letter-spacing:.7px;
+  }
+
   /* ---------- threads ---------- */
 
   .thread-row{
@@ -2434,6 +2611,15 @@
       padding:16px 17px;
     }
 
+    .home-admin-grid,
+    .board-access-row{
+      grid-template-columns:1fr;
+    }
+
+    .home-update-body{
+      padding:18px 16px;
+    }
+
     .vault-shell{
       grid-template-columns:1fr;
     }
@@ -3108,6 +3294,7 @@ let forumPresenceChannel = null;
 let forumPresenceSubscribed = false;
 let forumPresenceRefreshTimer = null;
 let lastMemberActivityTouch = 0;
+let currentHomeUpdateTab = 'news';
 let forumPresenceSnapshot = {
   guestCount:0,
   memberIds:[]
@@ -6262,6 +6449,331 @@ function setActiveSidebar({
   });
 }
 
+const BOARD_POSTING_MODES = {
+  open:{
+    label:'Open',
+    description:'Members may create threads and reply.'
+  },
+  admin_threads:{
+    label:'Admin threads',
+    description:'Only admins create threads; members may reply.'
+  },
+  staff_only:{
+    label:'Admin only',
+    description:'Only admins may create threads or reply.'
+  },
+  read_only:{
+    label:'Read only',
+    description:'Existing content remains readable; no new posts.'
+  }
+};
+
+function boardPostingMode(board){
+  return board?.posting_mode || 'open';
+}
+
+function boardModeOptions(selected = 'open'){
+  return Object
+    .entries(BOARD_POSTING_MODES)
+    .map(([value, mode]) => `
+      <option value="${value}" ${value === selected ? 'selected' : ''}>
+        ${esc(mode.label)} — ${esc(mode.description)}
+      </option>
+    `)
+    .join('');
+}
+
+function canCreateThreadInBoard(board){
+  const mode = boardPostingMode(board);
+
+  if (mode === 'read_only'){
+    return false;
+  }
+
+  return mode === 'open' ||
+    currentProfile?.is_admin === true;
+}
+
+async function renderHomeUpdates(tab = currentHomeUpdateTab){
+  const panel = $('#home-updates');
+
+  if (!panel){
+    return;
+  }
+
+  currentHomeUpdateTab =
+    tab === 'weather' ? 'weather' : 'news';
+
+  const [settingsResult, announcementsResult] =
+    await Promise.all([
+      sb
+        .from('forum_settings')
+        .select('*')
+        .eq('id', 1)
+        .single(),
+      sb
+        .from('announcements')
+        .select('id, title, content, created_at, created_by')
+        .order('created_at', { ascending:false })
+        .order('id', { ascending:false })
+        .limit(5)
+    ]);
+
+  if (!panel.isConnected){
+    return;
+  }
+
+  if (settingsResult.error || announcementsResult.error){
+    panel.innerHTML = `
+      <div class="empty-state">
+        News and weather could not be loaded.
+      </div>
+    `;
+    return;
+  }
+
+  const settings = settingsResult.data;
+  const announcements = announcementsResult.data || [];
+  const isAdmin = currentProfile?.is_admin === true;
+  const weatherImage = safePostUrl(
+    settings.season_image_url,
+    true
+  );
+
+  const newsHtml = `
+    ${
+      announcements.length
+        ? announcements.map(announcement => `
+          <article class="announcement-item">
+            <div class="announcement-head">
+              <div>
+                <h3>${esc(announcement.title)}</h3>
+                <span class="announcement-date">
+                  ${new Date(announcement.created_at).toLocaleDateString()}
+                </span>
+              </div>
+
+              ${
+                isAdmin
+                  ? `<button class="post-action danger" data-delete-announcement="${announcement.id}" type="button">Delete</button>`
+                  : ''
+              }
+            </div>
+
+            <div class="announcement-content">
+              ${renderBbCode(announcement.content)}
+            </div>
+          </article>
+        `).join('')
+        : '<div class="empty-state">No announcements have been published yet.</div>'
+    }
+
+    ${
+      isAdmin
+        ? `
+          <div class="home-admin-editor">
+            <h3>Publish news</h3>
+
+            <div class="field">
+              <label for="announcement-title">Headline</label>
+              <input id="announcement-title" maxlength="160" type="text">
+            </div>
+
+            <div class="field">
+              <label for="announcement-content">Announcement</label>
+              <textarea id="announcement-content" maxlength="5000" placeholder="BBCode is supported."></textarea>
+            </div>
+
+            <button class="btn btn-gold" id="announcement-publish" type="button">
+              Publish Announcement
+            </button>
+          </div>
+        `
+        : ''
+    }
+  `;
+
+  const weatherHtml = `
+    <div class="weather-hero">
+      ${weatherImage ? `<img src="${esc(weatherImage)}" alt="">` : ''}
+      <h3>${esc(settings.season_title)}</h3>
+    </div>
+
+    <div class="weather-meta">
+      <span>${esc(settings.turn_label)}</span>
+      <span>${esc(settings.months_label)}</span>
+    </div>
+
+    <p class="weather-summary">
+      ${esc(settings.weather_summary)}
+    </p>
+
+    <div class="weather-details">
+      ${renderBbCode(settings.weather_details)}
+    </div>
+
+    ${
+      isAdmin
+        ? `
+          <div class="home-admin-editor">
+            <h3>Update weather</h3>
+
+            <div class="home-admin-grid">
+              <div class="field">
+                <label for="weather-season">Season title</label>
+                <input id="weather-season" maxlength="100" value="${esc(settings.season_title)}" type="text">
+              </div>
+
+              <div class="field">
+                <label for="weather-image">Banner image URL</label>
+                <input id="weather-image" maxlength="1000" value="${esc(settings.season_image_url || '')}" type="url">
+              </div>
+
+              <div class="field">
+                <label for="weather-turn">Turn label</label>
+                <input id="weather-turn" maxlength="100" value="${esc(settings.turn_label)}" type="text">
+              </div>
+
+              <div class="field">
+                <label for="weather-months">Months label</label>
+                <input id="weather-months" maxlength="100" value="${esc(settings.months_label)}" type="text">
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="weather-summary-input">Short forecast</label>
+              <textarea id="weather-summary-input" maxlength="500">${esc(settings.weather_summary)}</textarea>
+            </div>
+
+            <div class="field">
+              <label for="weather-details-input">Complete forecast</label>
+              <textarea id="weather-details-input" maxlength="5000" placeholder="BBCode is supported.">${esc(settings.weather_details)}</textarea>
+            </div>
+
+            <button class="btn btn-gold" id="weather-save" type="button">
+              Save Weather
+            </button>
+          </div>
+        `
+        : ''
+    }
+  `;
+
+  panel.innerHTML = `
+    <div class="home-update-tabs" role="tablist" aria-label="Forum updates">
+      <button class="home-update-tab ${currentHomeUpdateTab === 'news' ? 'active' : ''}" data-home-tab="news" type="button">
+        News
+      </button>
+      <button class="home-update-tab ${currentHomeUpdateTab === 'weather' ? 'active' : ''}" data-home-tab="weather" type="button">
+        Weather
+      </button>
+    </div>
+
+    <div class="home-update-body">
+      ${currentHomeUpdateTab === 'news' ? newsHtml : weatherHtml}
+    </div>
+  `;
+
+  panel.querySelectorAll('[data-home-tab]').forEach(button => {
+    button.addEventListener(
+      'click',
+      () => renderHomeUpdates(button.dataset.homeTab)
+    );
+  });
+
+  panel.querySelectorAll('[data-delete-announcement]').forEach(button => {
+    button.addEventListener('click', async () => {
+      if (!window.confirm('Delete this announcement?')){
+        return;
+      }
+
+      const { error } = await sb
+        .from('announcements')
+        .delete()
+        .eq('id', button.dataset.deleteAnnouncement);
+
+      if (error){
+        showToast('The announcement could not be deleted.');
+        return;
+      }
+
+      showToast('Announcement deleted.');
+      await renderHomeUpdates('news');
+    });
+  });
+
+  $('#announcement-publish')?.addEventListener('click', async () => {
+    const title = $('#announcement-title').value.trim();
+    const content = $('#announcement-content').value.trim();
+
+    if (!title || !content){
+      showToast('Add both a headline and announcement.');
+      return;
+    }
+
+    const { error } = await sb
+      .from('announcements')
+      .insert({
+        title,
+        content,
+        created_by:currentUser.id
+      });
+
+    if (error){
+      showToast(error.message);
+      return;
+    }
+
+    showToast('Announcement published.');
+    await renderHomeUpdates('news');
+  });
+
+  $('#weather-save')?.addEventListener('click', async () => {
+    const changes = {
+      season_title:$('#weather-season').value.trim(),
+      season_image_url:$('#weather-image').value.trim() || null,
+      turn_label:$('#weather-turn').value.trim(),
+      months_label:$('#weather-months').value.trim(),
+      weather_summary:$('#weather-summary-input').value.trim(),
+      weather_details:$('#weather-details-input').value.trim(),
+      updated_at:new Date().toISOString(),
+      updated_by:currentUser.id
+    };
+
+    if (
+      !changes.season_title ||
+      !changes.turn_label ||
+      !changes.months_label ||
+      !changes.weather_summary ||
+      !changes.weather_details
+    ){
+      showToast('Complete all weather fields except the optional image.');
+      return;
+    }
+
+    if (
+      changes.season_image_url &&
+      !safePostUrl(changes.season_image_url, true)
+    ){
+      showToast('Use a complete http:// or https:// image URL.');
+      return;
+    }
+
+    const { error } = await sb
+      .from('forum_settings')
+      .update(changes)
+      .eq('id', 1);
+
+    if (error){
+      showToast(error.message);
+      return;
+    }
+
+    showToast('Weather updated.');
+    await renderHomeUpdates('weather');
+  });
+}
+
 function showBoardList(){
 
   currentBoardId =
@@ -6283,6 +6795,16 @@ function showBoardList(){
       </div>
 
     </div>
+
+    <section
+      class="home-updates"
+      id="home-updates"
+      aria-label="News and weather"
+    >
+      <div class="empty-state">
+        Loading news and weather...
+      </div>
+    </section>
 
     <div id="boards-container"></div>
 
@@ -6333,6 +6855,10 @@ function showBoardList(){
                   ''
                 )}
               </p>
+
+              <span class="board-access-badge">
+                ${esc(BOARD_POSTING_MODES[boardPostingMode(b)].label)}
+              </span>
             </button>
           `
         )
@@ -6361,6 +6887,10 @@ function showBoardList(){
   renderForumActivity().catch(error =>
     console.error(error)
   );
+
+  renderHomeUpdates().catch(error =>
+    console.error(error)
+  );
 }
 
 function adminBoardsBlock(){
@@ -6386,6 +6916,10 @@ function adminBoardsBlock(){
           placeholder="Description"
         >
 
+        <select id="admin-board-mode" aria-label="New board access">
+          ${boardModeOptions('open')}
+        </select>
+
         <button
           class="btn btn-gold"
           id="admin-board-submit"
@@ -6393,6 +6927,24 @@ function adminBoardsBlock(){
           Add
         </button>
 
+      </div>
+
+      <div class="board-access-list">
+        <h3>Board access</h3>
+
+        ${boards.map(board => `
+          <div class="board-access-row">
+            <strong>${esc(board.name)}</strong>
+
+            <select data-board-mode="${board.id}" aria-label="Access for ${esc(board.name)}">
+              ${boardModeOptions(boardPostingMode(board))}
+            </select>
+
+            <button class="btn btn-ghost" data-board-mode-save="${board.id}" type="button">
+              Save
+            </button>
+          </div>
+        `).join('')}
       </div>
 
     </div>
@@ -6422,6 +6974,9 @@ function wireAdminBoards(){
           .value
           .trim();
 
+      const postingMode =
+        $('#admin-board-mode').value;
+
       if (!name){
         return;
       }
@@ -6434,6 +6989,8 @@ function wireAdminBoards(){
           .insert({
             name,
             description,
+            posting_mode:
+              postingMode,
             sort_order:
               boards.length
           });
@@ -6456,6 +7013,29 @@ function wireAdminBoards(){
       );
     }
   );
+
+  $all('[data-board-mode-save]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const boardId = Number(button.dataset.boardModeSave);
+      const select = $(`[data-board-mode="${boardId}"]`);
+      button.disabled = true;
+
+      const { error } = await sb
+        .from('boards')
+        .update({ posting_mode:select.value })
+        .eq('id', boardId);
+
+      if (error){
+        button.disabled = false;
+        showToast(error.message);
+        return;
+      }
+
+      await loadBoards();
+      showBoardList();
+      showToast('Board access updated.');
+    });
+  });
 }
 
 /* ============================================================
@@ -6484,6 +7064,13 @@ async function showThreadList(boardId, page = 1){
         b.id === boardId
     );
 
+  const mode = BOARD_POSTING_MODES[
+    boardPostingMode(board)
+  ];
+
+  const canCreateThread =
+    canCreateThreadInBoard(board);
+
   setContent(`
     <button
       class="back-link"
@@ -6510,14 +7097,24 @@ async function showThreadList(boardId, page = 1){
           )}
         </div>
 
+        <span class="board-access-badge">
+          ${esc(mode.label)} — ${esc(mode.description)}
+        </span>
+
       </div>
 
-      <button
-        class="btn btn-gold"
-        id="open-new-thread"
-      >
-        + New Thread
-      </button>
+      ${
+        canCreateThread
+          ? `
+            <button
+              class="btn btn-gold"
+              id="open-new-thread"
+            >
+              + New Thread
+            </button>
+          `
+          : ''
+      }
 
     </div>
 
@@ -6531,7 +7128,7 @@ async function showThreadList(boardId, page = 1){
     );
 
   $('#open-new-thread')
-    .addEventListener(
+    ?.addEventListener(
       'click',
       openNewThreadModal
     );
@@ -6954,7 +7551,7 @@ async function showThread(threadId, postPage = 1){
     await sb
       .from('threads')
       .select(
-        'title, author_id, locked, board_id, is_approved_character'
+        'title, author_id, pinned, locked, board_id, is_approved_character'
       )
       .eq(
         'id',
@@ -6985,11 +7582,29 @@ async function showThread(threadId, postPage = 1){
   const isAdmin =
     currentProfile?.is_admin === true;
 
+  const threadBoard =
+    boards.find(board => board.id === thread.board_id);
+
+  const postingMode =
+    boardPostingMode(threadBoard);
+
+  const canReply =
+    postingMode !== 'read_only' &&
+    (
+      postingMode !== 'staff_only' ||
+      isAdmin
+    ) &&
+    (
+      !thread.locked ||
+      isAdmin
+    );
+
   const canEditThread =
     isAdmin ||
     (
       thread.author_id === currentUser.id &&
-      !thread.locked
+      !thread.locked &&
+      postingMode === 'open'
     );
 
   const [
@@ -7032,6 +7647,12 @@ async function showThread(threadId, postPage = 1){
       <h2>
         ${esc(thread.title)}
       </h2>
+
+      ${
+        thread.pinned
+          ? '<span class="thread-state-badge approved">Pinned</span>'
+          : ''
+      }
 
       ${
         thread.locked
@@ -7118,6 +7739,13 @@ async function showThread(threadId, postPage = 1){
                   </button>
 
                   <button
+                    class="btn btn-ghost"
+                    id="thread-pin-toggle"
+                  >
+                    ${thread.pinned ? 'Unpin Thread' : 'Pin Thread'}
+                  </button>
+
+                  <button
                     class="btn ${
                       thread.locked
                         ? 'btn-ghost'
@@ -7151,15 +7779,26 @@ async function showThread(threadId, postPage = 1){
         : ''
     }`;
 
-  if (thread.locked){
+  if (
+    thread.locked ||
+    postingMode === 'read_only' ||
+    (
+      postingMode === 'staff_only' &&
+      !isAdmin
+    )
+  ){
 
     $('#thread-state').innerHTML =
       `<div class="thread-lock-notice">
-        <strong>🔒 This thread is locked.</strong>
+        <strong>🔒 Replies are restricted.</strong>
         ${
-          isAdmin
-            ? 'Members can read it, while admins may still reply or unlock it.'
-            : 'It remains available to read, but new replies are closed.'
+          postingMode === 'read_only'
+            ? 'This board is a read-only archive.'
+            : postingMode === 'staff_only'
+              ? 'Only administrators may post in this board.'
+              : isAdmin
+                ? 'Members can read it, while admins may still reply or unlock it.'
+                : 'It remains available to read, but new replies are closed.'
         }
       </div>`;
   }
@@ -7216,7 +7855,7 @@ async function showThread(threadId, postPage = 1){
       }
     );
 
-  if (!thread.locked || isAdmin){
+  if (canReply){
 
     const replyDraft = readDraft(
       'reply',
@@ -7406,6 +8045,38 @@ async function showThread(threadId, postPage = 1){
     );
 
   if (isAdmin){
+
+    $('#thread-pin-toggle')
+      .addEventListener(
+        'click',
+        async () => {
+          const pinButton =
+            $('#thread-pin-toggle');
+
+          pinButton.disabled = true;
+
+          const { data:pinnedThread, error:pinError } = await sb
+            .from('threads')
+            .update({ pinned:!thread.pinned })
+            .eq('id', threadId)
+            .select('pinned')
+            .single();
+
+          if (pinError){
+            pinButton.disabled = false;
+            showToast(pinError.message);
+            return;
+          }
+
+          showToast(
+            pinnedThread.pinned
+              ? 'Thread pinned.'
+              : 'Thread unpinned.'
+          );
+
+          await showThread(threadId, currentPostPage);
+        }
+      );
 
     $('#thread-move-submit')
       .addEventListener(
@@ -7762,11 +8433,20 @@ async function loadPosts(threadId, page = 1){
     data
       .map(
         (p, index) => {
+          const currentBoardMode =
+            boardPostingMode(
+              boards.find(board => board.id === currentBoardId)
+            );
+
           const canManagePost =
             currentProfile?.is_admin === true ||
             (
               p.author_id === currentUser.id &&
-              !currentThreadLocked
+              !currentThreadLocked &&
+              (
+                currentBoardMode === 'open' ||
+                currentBoardMode === 'admin_threads'
+              )
             );
 
           return `
