@@ -940,6 +940,99 @@
     white-space:nowrap;
   }
 
+  .search-form{
+    display:flex;
+    gap:8px;
+    margin-bottom:20px;
+  }
+
+  .search-form input{
+    flex:1;
+    min-width:0;
+    padding:11px 12px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--void-soft);
+    color:var(--parchment);
+    font-size:14px;
+  }
+
+  .pagination{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:20px;
+  }
+
+  .pagination-status{
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:10px;
+  }
+
+  .member-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    gap:12px;
+  }
+
+  .member-card{
+    display:flex;
+    align-items:center;
+    gap:13px;
+    width:100%;
+    padding:16px;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius-large);
+    background:var(--panel);
+    color:var(--parchment);
+    text-align:left;
+  }
+
+  .member-card:hover{
+    border-color:var(--accent);
+    background:var(--panel-raised);
+  }
+
+  .member-avatar,
+  .member-avatar-fallback{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex:0 0 54px;
+    width:54px;
+    height:54px;
+    border:1px solid var(--line);
+    border-radius:50%;
+    background:var(--panel-raised);
+    object-fit:cover;
+    color:var(--accent-soft);
+    font-family:var(--display);
+    font-size:22px;
+  }
+
+  .member-card-copy{
+    min-width:0;
+  }
+
+  .member-card-copy strong{
+    display:block;
+    overflow:hidden;
+    font-family:var(--display);
+    font-size:19px;
+    font-weight:600;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .member-card-copy .member-joined{
+    display:block;
+    margin-top:3px;
+    color:var(--muted);
+    font-size:10px;
+  }
+
   /* ---------- posts ---------- */
 
   .thread-heading{
@@ -1592,6 +1685,61 @@
     font-size:12px;
     line-height:1.65;
     white-space:pre-wrap;
+  }
+
+  .notification-badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:19px;
+    height:19px;
+    margin-left:auto;
+    padding:0 5px;
+    border-radius:999px;
+    background:var(--accent);
+    color:#fff;
+    font-family:var(--mono);
+    font-size:9px;
+  }
+
+  .notification-link{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+
+  .notification-badge[hidden]{
+    display:none;
+  }
+
+  .notification-card{
+    display:block;
+    width:100%;
+    margin-bottom:8px;
+    padding:16px 18px;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius);
+    background:var(--panel);
+    color:var(--parchment-soft);
+    text-align:left;
+  }
+
+  .notification-card.unread{
+    border-color:var(--accent);
+    background:var(--panel-raised);
+  }
+
+  .notification-card:hover{
+    border-color:var(--accent-soft);
+  }
+
+  .notification-card strong{
+    color:var(--parchment);
+  }
+
+  .notification-card .hint{
+    display:block;
+    margin-top:5px;
   }
 
   .reported-highlight{
@@ -2371,11 +2519,28 @@
 
           <div id="dropdown-board-list"></div>
 
+          <button class="dropdown-link" data-nav="search" type="button">
+            Search Threads
+          </button>
+
+          <button class="dropdown-link" data-nav="members" type="button">
+            Members
+          </button>
+
           <div class="menu-divider"></div>
           <div class="menu-section-label">Account</div>
 
           <button class="dropdown-link" data-nav="profile" type="button">
             Profile
+          </button>
+
+          <button class="dropdown-link notification-link" data-nav="notifications" type="button">
+            Notifications
+            <span
+              class="notification-badge"
+              id="notification-count"
+              hidden
+            >0</span>
           </button>
 
           <button class="dropdown-link" data-nav="store" type="button">
@@ -2738,7 +2903,14 @@ let boards = [];
 let currentBoardId = null;
 let currentThreadId = null;
 let currentThreadLocked = false;
+let currentPostPage = 1;
 let currentReportTarget = null;
+let currentThreadListPage = 1;
+let notificationChannel = null;
+
+const THREAD_PAGE_SIZE = 25;
+const POST_PAGE_SIZE = 10;
+const DIRECTORY_PAGE_SIZE = 20;
 
 let passwordRecoveryActive =
   (
@@ -3266,6 +3438,85 @@ function setContent(html){
   $('#content').innerHTML = html;
 }
 
+function paginationHtml(page, totalPages, attribute){
+  if (totalPages <= 1){
+    return '';
+  }
+
+  return `
+    <nav class="pagination" aria-label="Pagination">
+      <button
+        class="btn btn-ghost"
+        ${attribute}="${page - 1}"
+        type="button"
+        ${page <= 1 ? 'disabled' : ''}
+      >
+        ← Previous
+      </button>
+
+      <span class="pagination-status">
+        Page ${page} of ${totalPages}
+      </span>
+
+      <button
+        class="btn btn-ghost"
+        ${attribute}="${page + 1}"
+        type="button"
+        ${page >= totalPages ? 'disabled' : ''}
+      >
+        Next →
+      </button>
+    </nav>
+  `;
+}
+
+async function refreshNotificationCount(){
+  if (!currentUser){
+    return;
+  }
+
+  const { count, error } = await sb
+    .from('notifications')
+    .select('id', { count:'exact', head:true })
+    .is('read_at', null);
+
+  if (error){
+    console.error(error);
+    return;
+  }
+
+  const badge = $('#notification-count');
+  const unread = count || 0;
+
+  badge.textContent = unread > 99 ? '99+' : String(unread);
+  badge.hidden = unread === 0;
+}
+
+async function subscribeToNotifications(){
+  if (notificationChannel){
+    await sb.removeChannel(notificationChannel);
+    notificationChannel = null;
+  }
+
+  if (!currentUser){
+    return;
+  }
+
+  notificationChannel = sb
+    .channel(`notifications:${currentUser.id}`)
+    .on(
+      'postgres_changes',
+      {
+        event:'*',
+        schema:'public',
+        table:'notifications',
+        filter:`recipient_id=eq.${currentUser.id}`
+      },
+      refreshNotificationCount
+    )
+    .subscribe();
+}
+
 const REPORT_REASONS = {
   post:[
     ['spam', 'Spam'],
@@ -3396,6 +3647,9 @@ $all('.dropdown-link[data-nav]').forEach(btn => {
     closeMenu();
 
     if (btn.dataset.nav === 'profile') showProfile(currentUser.id);
+    if (btn.dataset.nav === 'notifications') showNotifications();
+    if (btn.dataset.nav === 'members') showMembers();
+    if (btn.dataset.nav === 'search') showThreadSearch();
     if (btn.dataset.nav === 'store') showStore();
     if (btn.dataset.nav === 'inventory') showInventory();
     if (btn.dataset.nav === 'vault') showVault();
@@ -3619,6 +3873,14 @@ $('#signup-form')
         $('#signup-password')
           .value;
 
+      if (!/^[A-Za-z0-9_-]{3,30}$/.test(username)){
+        authMsg(
+          'error',
+          'Usernames must be 3–30 characters using letters, numbers, underscores, or hyphens.'
+        );
+        return;
+      }
+
       const { error } =
         await sb.auth.signUp({
           email,
@@ -3821,6 +4083,9 @@ sb.auth.onAuthStateChange(
 
       await loadBoards();
 
+      await refreshNotificationCount();
+      await subscribeToNotifications();
+
       $('#auth-screen').style.display =
         'none';
 
@@ -3831,6 +4096,11 @@ sb.auth.onAuthStateChange(
       showBoardList();
 
     } else {
+
+      if (notificationChannel){
+        await sb.removeChannel(notificationChannel);
+        notificationChannel = null;
+      }
 
       currentUser = null;
       currentProfile = null;
@@ -4354,6 +4624,465 @@ async function showProfile(
 }
 
 /* ============================================================
+   MEMBERS / SEARCH / NOTIFICATIONS
+   ============================================================ */
+
+async function showMembers(page = 1, searchTerm = ''){
+  const safePage = Math.max(1, Number(page) || 1);
+  const query = searchTerm.trim().slice(0, 60);
+  const from = (safePage - 1) * DIRECTORY_PAGE_SIZE;
+  const to = from + DIRECTORY_PAGE_SIZE - 1;
+
+  currentBoardId = null;
+  currentThreadId = null;
+  setActiveSidebar({ nav:'members' });
+
+  setContent(`
+    <div class="page-header">
+      <div>
+        <h2>Members</h2>
+        <div class="desc">Browse the people who call Nexus home.</div>
+      </div>
+    </div>
+
+    <form class="search-form" id="member-search-form">
+      <input
+        id="member-search-input"
+        type="search"
+        maxlength="60"
+        value="${esc(query)}"
+        placeholder="Search usernames..."
+        aria-label="Search members"
+      >
+      <button class="btn btn-gold" type="submit">Search</button>
+    </form>
+
+    <div id="member-results">
+      <div class="empty-state">Loading members...</div>
+    </div>
+  `);
+
+  $('#member-search-form').addEventListener(
+    'submit',
+    event => {
+      event.preventDefault();
+      showMembers(1, $('#member-search-input').value);
+    }
+  );
+
+  let memberQuery = sb
+    .from('profiles')
+    .select(
+      'id, username, avatar_url, bio, is_admin, created_at',
+      { count:'exact' }
+    );
+
+  if (query){
+    memberQuery = memberQuery.ilike('username', `%${query}%`);
+  }
+
+  const { data, count, error } = await memberQuery
+    .order('username', { ascending:true })
+    .range(from, to);
+
+  const results = $('#member-results');
+
+  if (error){
+    results.innerHTML = '<div class="empty-state">Members could not be loaded.</div>';
+    return;
+  }
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil((count || 0) / DIRECTORY_PAGE_SIZE)
+  );
+
+  if (safePage > totalPages){
+    await showMembers(totalPages, query);
+    return;
+  }
+
+  if (!data?.length){
+    results.innerHTML = `
+      <div class="empty-state">
+        ${query ? 'No members match that search.' : 'No members yet.'}
+      </div>
+    `;
+    return;
+  }
+
+  results.innerHTML = `
+    <div class="member-grid">
+      ${data.map(member => {
+        const initial = (member.username || '?').charAt(0).toUpperCase();
+        const joined = member.created_at
+          ? new Date(member.created_at).toLocaleDateString(undefined, {
+              month:'short',
+              year:'numeric'
+            })
+          : 'Unknown';
+
+        return `
+          <button
+            class="member-card"
+            data-member-id="${member.id}"
+            type="button"
+          >
+            ${
+              member.avatar_url
+                ? `<img
+                    class="member-avatar"
+                    src="${esc(member.avatar_url)}"
+                    alt=""
+                  >`
+                : `<span class="member-avatar-fallback">${esc(initial)}</span>`
+            }
+
+            <span class="member-card-copy">
+              <strong>${esc(member.username)}</strong>
+              ${
+                member.is_admin
+                  ? '<span class="admin-badge">◆ Admin</span>'
+                  : ''
+              }
+              <span class="member-joined">Joined ${esc(joined)}</span>
+            </span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+
+    ${paginationHtml(safePage, totalPages, 'data-member-page')}
+  `;
+
+  $all('[data-member-id]').forEach(button => {
+    button.addEventListener(
+      'click',
+      () => showProfile(button.dataset.memberId)
+    );
+  });
+
+  $all('[data-member-page]').forEach(button => {
+    button.addEventListener(
+      'click',
+      () => showMembers(Number(button.dataset.memberPage), query)
+    );
+  });
+}
+
+async function showThreadSearch(page = 1, searchTerm = ''){
+  const safePage = Math.max(1, Number(page) || 1);
+  const query = searchTerm.trim().slice(0, 100);
+
+  currentBoardId = null;
+  currentThreadId = null;
+  setActiveSidebar({ nav:'search' });
+
+  setContent(`
+    <div class="page-header">
+      <div>
+        <h2>Search Threads</h2>
+        <div class="desc">Find threads by title across every board.</div>
+      </div>
+    </div>
+
+    <form class="search-form" id="thread-search-form">
+      <input
+        id="thread-search-input"
+        type="search"
+        maxlength="100"
+        value="${esc(query)}"
+        placeholder="Search thread titles..."
+        aria-label="Search thread titles"
+      >
+      <button class="btn btn-gold" type="submit">Search</button>
+    </form>
+
+    <div id="thread-search-results">
+      <div class="empty-state">
+        ${query ? 'Searching...' : 'Enter part of a thread title to begin.'}
+      </div>
+    </div>
+  `);
+
+  $('#thread-search-form').addEventListener(
+    'submit',
+    event => {
+      event.preventDefault();
+      showThreadSearch(1, $('#thread-search-input').value);
+    }
+  );
+
+  if (!query){
+    return;
+  }
+
+  const from = (safePage - 1) * DIRECTORY_PAGE_SIZE;
+  const to = from + DIRECTORY_PAGE_SIZE - 1;
+
+  const { data, count, error } = await sb
+    .from('threads')
+    .select(
+      `
+        id,
+        board_id,
+        title,
+        locked,
+        created_at,
+        boards(name),
+        author:profiles!threads_author_id_fkey(username, is_admin)
+      `,
+      { count:'exact' }
+    )
+    .textSearch('title', query, {
+      config:'simple',
+      type:'websearch'
+    })
+    .order('created_at', { ascending:false })
+    .order('id', { ascending:false })
+    .range(from, to);
+
+  const results = $('#thread-search-results');
+
+  if (error){
+    results.innerHTML = '<div class="empty-state">Search could not be completed.</div>';
+    return;
+  }
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil((count || 0) / DIRECTORY_PAGE_SIZE)
+  );
+
+  if (safePage > totalPages){
+    await showThreadSearch(totalPages, query);
+    return;
+  }
+
+  if (!data?.length){
+    results.innerHTML = '<div class="empty-state">No matching threads found.</div>';
+    return;
+  }
+
+  results.innerHTML = `
+    ${data.map(thread => `
+      <button
+        class="thread-row"
+        data-search-thread="${thread.id}"
+        data-search-board="${thread.board_id}"
+        type="button"
+      >
+        <span class="thread-main">
+          ${thread.locked ? '<span class="lock-badge">🔒</span>' : ''}
+          <span class="thread-title">${esc(thread.title)}</span>
+        </span>
+
+        <span class="thread-meta">
+          ${esc(thread.boards?.name || 'Unknown board')}
+          · ${esc(thread.author?.username || 'unknown')}
+          · ${timeAgo(thread.created_at)}
+        </span>
+      </button>
+    `).join('')}
+
+    ${paginationHtml(safePage, totalPages, 'data-search-page')}
+  `;
+
+  $all('[data-search-thread]').forEach(button => {
+    button.addEventListener(
+      'click',
+      () => {
+        currentBoardId = Number(button.dataset.searchBoard);
+        showThread(button.dataset.searchThread);
+      }
+    );
+  });
+
+  $all('[data-search-page]').forEach(button => {
+    button.addEventListener(
+      'click',
+      () => showThreadSearch(Number(button.dataset.searchPage), query)
+    );
+  });
+}
+
+async function navigateToPost(postId, threadId){
+  const { data:post, error } = await sb
+    .from('posts')
+    .select('id, created_at')
+    .eq('id', postId)
+    .single();
+
+  if (error || !post){
+    showToast('That post is no longer available.');
+    return;
+  }
+
+  const { count } = await sb
+    .from('posts')
+    .select('id', { count:'exact', head:true })
+    .eq('thread_id', threadId)
+    .lte('created_at', post.created_at);
+
+  const page = Math.max(1, Math.ceil((count || 1) / POST_PAGE_SIZE));
+  await showThread(threadId, page);
+
+  const card = document.querySelector(
+    `.post-card[data-post-id="${postId}"]`
+  );
+
+  card?.classList.add('reported-highlight');
+  card?.scrollIntoView({ behavior:'smooth', block:'center' });
+
+  if (card){
+    setTimeout(() => card.classList.remove('reported-highlight'), 3500);
+  }
+}
+
+async function showNotifications(page = 1){
+  const safePage = Math.max(1, Number(page) || 1);
+  const from = (safePage - 1) * DIRECTORY_PAGE_SIZE;
+  const to = from + DIRECTORY_PAGE_SIZE - 1;
+
+  currentBoardId = null;
+  currentThreadId = null;
+  setActiveSidebar({ nav:'notifications' });
+
+  setContent(`
+    <div class="page-header">
+      <div>
+        <h2>Notifications</h2>
+        <div class="desc">Replies to your threads and mentions of your username.</div>
+      </div>
+
+      <button class="btn btn-ghost" id="mark-notifications-read" type="button">
+        Mark All Read
+      </button>
+    </div>
+
+    <div id="notification-list">
+      <div class="empty-state">Loading notifications...</div>
+    </div>
+  `);
+
+  $('#mark-notifications-read').addEventListener(
+    'click',
+    async event => {
+      event.currentTarget.disabled = true;
+
+      const { error } = await sb
+        .from('notifications')
+        .update({ read_at:new Date().toISOString() })
+        .is('read_at', null);
+
+      if (error){
+        event.currentTarget.disabled = false;
+        showToast('Notifications could not be updated.');
+        return;
+      }
+
+      await refreshNotificationCount();
+      await showNotifications(safePage);
+    }
+  );
+
+  const { data, count, error } = await sb
+    .from('notifications')
+    .select(
+      `
+        id,
+        type,
+        post_id,
+        thread_id,
+        created_at,
+        read_at,
+        actor:profiles!notifications_actor_id_fkey(username),
+        threads(title, board_id)
+      `,
+      { count:'exact' }
+    )
+    .order('created_at', { ascending:false })
+    .range(from, to);
+
+  const list = $('#notification-list');
+
+  if (error){
+    list.innerHTML = '<div class="empty-state">Notifications could not be loaded.</div>';
+    return;
+  }
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil((count || 0) / DIRECTORY_PAGE_SIZE)
+  );
+
+  if (safePage > totalPages){
+    await showNotifications(totalPages);
+    return;
+  }
+
+  if (!data?.length){
+    list.innerHTML = '<div class="empty-state">No notifications yet.</div>';
+    return;
+  }
+
+  list.innerHTML = `
+    ${data.map(notification => {
+      const actor = notification.actor?.username || 'A member';
+      const title = notification.threads?.title || 'a thread';
+      const message = notification.type === 'mention'
+        ? `${actor} mentioned you in “${title}”.`
+        : `${actor} replied to your thread “${title}”.`;
+
+      return `
+        <button
+          class="notification-card ${notification.read_at ? '' : 'unread'}"
+          data-notification-id="${notification.id}"
+          data-notification-post="${notification.post_id}"
+          data-notification-thread="${notification.thread_id}"
+          data-notification-unread="${notification.read_at ? 'false' : 'true'}"
+          data-notification-board="${notification.threads?.board_id || ''}"
+          type="button"
+        >
+          <strong>${esc(message)}</strong>
+          <span class="hint">${timeAgo(notification.created_at)}</span>
+        </button>
+      `;
+    }).join('')}
+
+    ${paginationHtml(safePage, totalPages, 'data-notification-page')}
+  `;
+
+  $all('[data-notification-id]').forEach(button => {
+    button.addEventListener(
+      'click',
+      async () => {
+        if (button.dataset.notificationUnread === 'true'){
+          await sb
+            .from('notifications')
+            .update({ read_at:new Date().toISOString() })
+            .eq('id', button.dataset.notificationId);
+        }
+
+        currentBoardId = Number(button.dataset.notificationBoard) || null;
+        await refreshNotificationCount();
+        await navigateToPost(
+          button.dataset.notificationPost,
+          button.dataset.notificationThread
+        );
+      }
+    );
+  });
+
+  $all('[data-notification-page]').forEach(button => {
+    button.addEventListener(
+      'click',
+      () => showNotifications(Number(button.dataset.notificationPage))
+    );
+  });
+}
+
+/* ============================================================
    REPORT MODERATION
    ============================================================ */
 
@@ -4651,24 +5380,7 @@ async function showReports(activeStatus = 'open'){
           return;
         }
 
-        await showThread(post.thread_id);
-
-        const postCard = document.querySelector(
-          `.post-card[data-post-id="${post.id}"]`
-        );
-
-        postCard?.classList.add('reported-highlight');
-        postCard?.scrollIntoView({
-          behavior:'smooth',
-          block:'center'
-        });
-
-        if (postCard){
-          setTimeout(
-            () => postCard.classList.remove('reported-highlight'),
-            3500
-          );
-        }
+        await navigateToPost(post.id, post.thread_id);
       }
     );
   });
@@ -5013,10 +5725,17 @@ function wireAdminBoards(){
    THREADS
    ============================================================ */
 
-async function showThreadList(boardId){
+async function showThreadList(boardId, page = 1){
+
+  const safePage = Math.max(1, Number(page) || 1);
+  const from = (safePage - 1) * THREAD_PAGE_SIZE;
+  const to = from + THREAD_PAGE_SIZE - 1;
 
   currentBoardId =
     boardId;
+
+  currentThreadListPage =
+    safePage;
 
   setActiveSidebar({
     boardId
@@ -5082,12 +5801,14 @@ async function showThreadList(boardId){
 
   const {
     data,
+    count,
     error
   } =
     await sb
       .from('threads')
       .select(
-        'id, title, author_id, pinned, locked, is_approved_character, created_at, author:profiles!threads_author_id_fkey(username, is_admin)'
+        'id, title, author_id, pinned, locked, is_approved_character, created_at, author:profiles!threads_author_id_fkey(username, is_admin)',
+        { count:'exact' }
       )
       .eq(
         'board_id',
@@ -5104,7 +5825,14 @@ async function showThreadList(boardId){
         {
           ascending:false
         }
-      );
+      )
+      .order(
+        'id',
+        {
+          ascending:false
+        }
+      )
+      .range(from, to);
 
   const container =
     $('#threads-container');
@@ -5118,6 +5846,16 @@ async function showThreadList(boardId){
 
     console.error(error);
 
+    return;
+  }
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil((count || 0) / THREAD_PAGE_SIZE)
+  );
+
+  if (safePage > totalPages){
+    await showThreadList(boardId, totalPages);
     return;
   }
 
@@ -5191,7 +5929,12 @@ async function showThreadList(boardId){
           </button>
         `
       )
-      .join('');
+      .join('') +
+    paginationHtml(
+      safePage,
+      totalPages,
+      'data-thread-list-page'
+    );
 
   $all('.thread-row [data-profile-id]')
     .forEach(link => {
@@ -5232,6 +5975,17 @@ async function showThreadList(boardId){
           )
       );
 
+    });
+
+  $all('[data-thread-list-page]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        () => showThreadList(
+          boardId,
+          Number(button.dataset.threadListPage)
+        )
+      );
     });
 }
 
@@ -5350,7 +6104,7 @@ $('#new-thread-submit')
    THREAD VIEW / POSTS
    ============================================================ */
 
-async function showThread(threadId){
+async function showThread(threadId, postPage = 1){
 
   currentThreadId =
     threadId;
@@ -5380,7 +6134,8 @@ async function showThread(threadId){
       'click',
       () =>
         showThreadList(
-          currentBoardId
+          currentBoardId,
+          currentThreadListPage
         )
     );
 
@@ -5579,7 +6334,8 @@ async function showThread(threadId){
   }
 
   await loadPosts(
-    threadId
+    threadId,
+    postPage
   );
 
   $('#thread-report')
@@ -5612,7 +6368,7 @@ async function showThread(threadId){
         <div class="composer-foot">
 
           <span class="hint">
-            BBCode and [dohtml] templates are supported. Posts under 15 characters don't earn coin.
+            BBCode and [dohtml] are supported. Use @username to mention someone. Posts under 15 characters don't earn coin.
           </span>
 
           <button
@@ -5972,13 +6728,48 @@ async function showThread(threadId){
         await refreshCurrency();
 
         await loadPosts(
-          threadId
+          threadId,
+          'last'
         );
       }
     );
 }
 
-async function loadPosts(threadId){
+async function loadPosts(threadId, page = 1){
+
+  const container =
+    $('#posts-container');
+
+  const {
+    count,
+    error:countError
+  } = await sb
+    .from('posts')
+    .select('id', { count:'exact', head:true })
+    .eq('thread_id', threadId);
+
+  if (countError){
+    container.innerHTML =
+      `<div class="empty-state">
+        Couldn't load posts.
+      </div>`;
+    return;
+  }
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil((count || 0) / POST_PAGE_SIZE)
+  );
+
+  const requestedPage = page === 'last'
+    ? totalPages
+    : Math.max(1, Number(page) || 1);
+
+  const safePage = Math.min(requestedPage, totalPages);
+  const from = (safePage - 1) * POST_PAGE_SIZE;
+  const to = from + POST_PAGE_SIZE - 1;
+
+  currentPostPage = safePage;
 
   const {
     data,
@@ -5998,10 +6789,14 @@ async function loadPosts(threadId){
         {
           ascending:true
         }
-      );
-
-  const container =
-    $('#posts-container');
+      )
+      .order(
+        'id',
+        {
+          ascending:true
+        }
+      )
+      .range(from, to);
 
   if (error){
 
@@ -6113,7 +6908,10 @@ async function loadPosts(threadId){
                         </button>
 
                         ${
-                          index > 0
+                          !(
+                            currentPostPage === 1 &&
+                            index === 0
+                          )
                             ? `
                               <button
                                 class="post-action danger"
@@ -6142,7 +6940,12 @@ async function loadPosts(threadId){
         `;
         }
       )
-      .join('');
+      .join('') +
+    paginationHtml(
+      safePage,
+      totalPages,
+      'data-post-page'
+    );
 
   data.forEach(
     (post, index) => {
@@ -6161,6 +6964,24 @@ async function loadPosts(threadId){
       }
     }
   );
+
+  $all('[data-post-page]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        async () => {
+          await loadPosts(
+            threadId,
+            Number(button.dataset.postPage)
+          );
+
+          $('#thread-header')?.scrollIntoView({
+            behavior:'smooth',
+            block:'start'
+          });
+        }
+      );
+    });
 
   $all('#posts-container [data-profile-id]')
     .forEach(link => {
@@ -6321,7 +7142,7 @@ async function loadPosts(threadId){
             )
             .addEventListener(
               'click',
-              () => loadPosts(threadId)
+              () => loadPosts(threadId, currentPostPage)
             );
 
           postBody
@@ -6369,7 +7190,7 @@ async function loadPosts(threadId){
                 }
 
                 showToast('Post updated.');
-                await loadPosts(threadId);
+                await loadPosts(threadId, currentPostPage);
               }
             );
         }
@@ -6417,7 +7238,7 @@ async function loadPosts(threadId){
           }
 
           showToast('Reply deleted.');
-          await loadPosts(threadId);
+          await loadPosts(threadId, currentPostPage);
         }
       );
     });
