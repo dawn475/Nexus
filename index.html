@@ -2458,6 +2458,12 @@ const SUPABASE_URL =
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnbmx0aXdvenZucnhtcHR0bnJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODE2MTMsImV4cCI6MjEwMTk1NzYxM30.LSW7G2AwseAZw3onfsOkbMGiHgJ5jNl-n_KsfeJgXtc';
 
+// Supabase may clear the recovery fragment while it initializes, so preserve
+// it before creating the client. This keeps recovery links distinct from an
+// ordinary restored sign-in session.
+const INITIAL_AUTH_FRAGMENT =
+  window.location.hash;
+
 const sb =
   window.supabase.createClient(
     SUPABASE_URL,
@@ -2562,6 +2568,21 @@ let boards = [];
 let currentBoardId = null;
 let currentThreadId = null;
 let currentThreadLocked = false;
+
+let passwordRecoveryActive =
+  (
+    new URLSearchParams(
+      window.location.search
+    ).get('recovery') === '1'
+  ) ||
+  (
+    new URLSearchParams(
+      INITIAL_AUTH_FRAGMENT.replace(
+        /^#/,
+        ''
+      )
+    ).get('type') === 'recovery'
+  );
 
 /* ============================================================
    HELPERS
@@ -3404,6 +3425,26 @@ $('#password-update-form')
         return;
       }
 
+      passwordRecoveryActive =
+        false;
+
+      const cleanUrl =
+        new URL(
+          window.location.href
+        );
+
+      cleanUrl.searchParams.delete(
+        'recovery'
+      );
+
+      cleanUrl.hash = '';
+
+      window.history.replaceState(
+        {},
+        '',
+        cleanUrl.toString()
+      );
+
       await sb.auth.signOut({
         scope:'local'
       });
@@ -3435,9 +3476,15 @@ sb.auth.onAuthStateChange(
   async (event, session) => {
 
     if (
-      event === 'PASSWORD_RECOVERY' &&
+      (
+        event === 'PASSWORD_RECOVERY' ||
+        passwordRecoveryActive
+      ) &&
       session?.user
     ){
+      passwordRecoveryActive =
+        true;
+
       currentUser =
         session.user;
 
