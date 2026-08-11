@@ -862,6 +862,105 @@
     line-height:1.5;
   }
 
+  .forum-activity{
+    margin-top:26px;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius-large);
+    background:var(--panel);
+    overflow:hidden;
+    box-shadow:var(--shadow-soft);
+  }
+
+  .activity-row{
+    display:grid;
+    grid-template-columns:145px minmax(0,1fr);
+    min-height:76px;
+    border-bottom:1px solid var(--line-soft);
+  }
+
+  .activity-label{
+    display:flex;
+    align-items:center;
+    padding:18px;
+    border-right:1px solid var(--line-soft);
+    color:var(--parchment);
+    font-family:var(--mono);
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:1.2px;
+  }
+
+  .activity-content{
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:8px;
+    min-width:0;
+    padding:18px 21px;
+  }
+
+  .activity-counts{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px 16px;
+    color:var(--muted-light);
+    font-family:var(--mono);
+    font-size:10px;
+  }
+
+  .activity-names{
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.7;
+  }
+
+  .activity-profile-link{
+    padding:0;
+    border:0;
+    background:none;
+    color:var(--accent-soft);
+    font:inherit;
+  }
+
+  .activity-profile-link:hover{
+    color:var(--gold-bright);
+  }
+
+  .member-groups{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    padding:18px 21px;
+  }
+
+  .member-group-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:9px;
+    padding:9px 13px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    color:var(--void);
+    font-family:var(--mono);
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.8px;
+  }
+
+  .member-group-chip strong{
+    font-size:11px;
+  }
+
+  .member-group-chip.admin{
+    background:var(--gold-bright);
+    border-color:var(--gold-bright);
+  }
+
+  .member-group-chip.member{
+    background:#6f8fc2;
+    border-color:#6f8fc2;
+  }
+
   /* ---------- threads ---------- */
 
   .thread-row{
@@ -2321,6 +2420,20 @@
       max-height:70vh;
     }
 
+    .activity-row{
+      grid-template-columns:1fr;
+    }
+
+    .activity-label{
+      padding:13px 17px;
+      border-right:0;
+      border-bottom:1px solid var(--line-soft);
+    }
+
+    .activity-content{
+      padding:16px 17px;
+    }
+
     .vault-shell{
       grid-template-columns:1fr;
     }
@@ -2991,6 +3104,14 @@ let currentPostPage = 1;
 let currentReportTarget = null;
 let currentThreadListPage = 1;
 let notificationChannel = null;
+let forumPresenceChannel = null;
+let forumPresenceSubscribed = false;
+let forumPresenceRefreshTimer = null;
+let lastMemberActivityTouch = 0;
+let forumPresenceSnapshot = {
+  guestCount:0,
+  memberIds:[]
+};
 
 const THREAD_PAGE_SIZE = 25;
 const POST_PAGE_SIZE = 10;
@@ -3789,6 +3910,310 @@ async function subscribeToNotifications(){
     .subscribe();
 }
 
+function forumVisitorId(){
+  const storageKey = 'nexus-forum-visitor';
+
+  try {
+    let visitorId = localStorage.getItem(storageKey);
+
+    if (!visitorId){
+      visitorId = window.crypto?.randomUUID?.() ||
+        `visitor-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      localStorage.setItem(storageKey, visitorId);
+    }
+
+    return visitorId;
+  } catch (error){
+    return `visitor-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+const FORUM_VISITOR_ID = forumVisitorId();
+const FORUM_PRESENCE_KEY =
+  window.crypto?.randomUUID?.() ||
+  `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+function scheduleForumActivityRefresh(){
+  clearTimeout(forumPresenceRefreshTimer);
+
+  forumPresenceRefreshTimer = setTimeout(
+    () => {
+      renderForumActivity().catch(error =>
+        console.error(error)
+      );
+    },
+    120
+  );
+}
+
+function syncForumPresence(){
+  if (!forumPresenceChannel){
+    return;
+  }
+
+  const presences = Object
+    .values(forumPresenceChannel.presenceState() || {})
+    .flat();
+
+  const memberIds = new Set();
+  const memberVisitors = new Set();
+  const guestVisitors = new Set();
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  presences.forEach(presence => {
+    if (
+      typeof presence.user_id === 'string' &&
+      uuidPattern.test(presence.user_id)
+    ){
+      memberIds.add(presence.user_id);
+
+      if (typeof presence.visitor_id === 'string'){
+        memberVisitors.add(presence.visitor_id);
+      }
+    } else if (typeof presence.visitor_id === 'string'){
+      guestVisitors.add(presence.visitor_id);
+    }
+  });
+
+  memberVisitors.forEach(visitorId =>
+    guestVisitors.delete(visitorId)
+  );
+
+  forumPresenceSnapshot = {
+    guestCount:guestVisitors.size,
+    memberIds:[...memberIds]
+  };
+
+  scheduleForumActivityRefresh();
+}
+
+async function updateForumPresence(){
+  if (
+    !forumPresenceChannel ||
+    !forumPresenceSubscribed
+  ){
+    return;
+  }
+
+  const { error } = await forumPresenceChannel.track({
+    visitor_id:FORUM_VISITOR_ID,
+    user_id:currentUser?.id || null,
+    online_at:new Date().toISOString()
+  });
+
+  if (error){
+    console.error(error);
+  }
+}
+
+function startForumPresence(){
+  if (forumPresenceChannel){
+    return;
+  }
+
+  forumPresenceChannel = sb
+    .channel(
+      'forum-presence',
+      {
+        config:{
+          presence:{
+            key:FORUM_PRESENCE_KEY
+          }
+        }
+      }
+    )
+    .on(
+      'presence',
+      { event:'sync' },
+      syncForumPresence
+    )
+    .subscribe(async status => {
+      forumPresenceSubscribed =
+        status === 'SUBSCRIBED';
+
+      if (forumPresenceSubscribed){
+        await updateForumPresence();
+      }
+    });
+}
+
+async function touchMemberActivity(force = false){
+  if (!currentUser){
+    return;
+  }
+
+  const now = Date.now();
+
+  if (
+    !force &&
+    now - lastMemberActivityTouch < 4 * 60 * 1000
+  ){
+    return;
+  }
+
+  const { error } = await sb
+    .from('profiles')
+    .update({
+      last_seen_at:new Date(now).toISOString()
+    })
+    .eq('id', currentUser.id);
+
+  if (error){
+    console.error(error);
+    return;
+  }
+
+  lastMemberActivityTouch = now;
+  scheduleForumActivityRefresh();
+}
+
+function activityProfileLinks(profiles){
+  if (!profiles.length){
+    return '<span>No members to show yet.</span>';
+  }
+
+  return profiles
+    .map(profile => `
+      <button
+        class="activity-profile-link"
+        data-activity-profile="${profile.id}"
+        type="button"
+      >${esc(profile.username || 'unknown')}</button>
+    `)
+    .join('<span aria-hidden="true">, </span>');
+}
+
+async function renderForumActivity(){
+  const panel = $('#forum-activity');
+
+  if (!panel){
+    return;
+  }
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const onlineMembersRequest =
+    forumPresenceSnapshot.memberIds.length
+      ? sb
+          .from('profiles')
+          .select('id, username, is_admin')
+          .in('id', forumPresenceSnapshot.memberIds)
+          .order('username', { ascending:true })
+      : Promise.resolve({ data:[], error:null });
+
+  const [
+    onlineResult,
+    todayResult,
+    totalResult,
+    adminResult
+  ] = await Promise.all([
+    onlineMembersRequest,
+    sb
+      .from('profiles')
+      .select('id, username, is_admin, last_seen_at')
+      .gte('last_seen_at', startOfToday.toISOString())
+      .order('last_seen_at', { ascending:false })
+      .limit(50),
+    sb
+      .from('profiles')
+      .select('id', { count:'exact', head:true }),
+    sb
+      .from('profiles')
+      .select('id', { count:'exact', head:true })
+      .eq('is_admin', true)
+  ]);
+
+  if (!panel.isConnected){
+    return;
+  }
+
+  if (
+    onlineResult.error ||
+    todayResult.error ||
+    totalResult.error ||
+    adminResult.error
+  ){
+    panel.innerHTML = `
+      <div class="empty-state">
+        Member activity could not be loaded.
+      </div>
+    `;
+    return;
+  }
+
+  const onlineMembers = onlineResult.data || [];
+  const activeToday = todayResult.data || [];
+  const totalMembers = totalResult.count || 0;
+  const adminCount = adminResult.count || 0;
+  const regularMemberCount = Math.max(
+    0,
+    totalMembers - adminCount
+  );
+
+  panel.innerHTML = `
+    <div class="activity-row">
+      <div class="activity-label">Online now</div>
+
+      <div class="activity-content">
+        <div class="activity-counts">
+          <span>
+            ${forumPresenceSnapshot.guestCount}
+            ${forumPresenceSnapshot.guestCount === 1 ? 'guest' : 'guests'}
+          </span>
+          <span>
+            ${onlineMembers.length}
+            ${onlineMembers.length === 1 ? 'member' : 'members'}
+          </span>
+        </div>
+
+        <div class="activity-names">
+          ${
+            onlineMembers.length
+              ? activityProfileLinks(onlineMembers)
+              : '<span>No signed-in members are online.</span>'
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="activity-row">
+      <div class="activity-label">Active today</div>
+
+      <div class="activity-content">
+        <div class="activity-names">
+          ${activityProfileLinks(activeToday)}
+        </div>
+      </div>
+    </div>
+
+    <div class="member-groups">
+      <span class="member-group-chip admin">
+        <strong>(${adminCount})</strong> Admin
+      </span>
+
+      <span class="member-group-chip member">
+        <strong>(${regularMemberCount})</strong>
+        ${regularMemberCount === 1 ? 'Member' : 'Members'}
+      </span>
+
+      <span class="activity-counts">
+        ${totalMembers} registered total
+      </span>
+    </div>
+  `;
+
+  panel
+    .querySelectorAll('[data-activity-profile]')
+    .forEach(link => {
+      link.addEventListener(
+        'click',
+        () => showProfile(link.dataset.activityProfile)
+      );
+    });
+}
+
 const REPORT_REASONS = {
   post:[
     ['spam', 'Spam'],
@@ -4365,6 +4790,8 @@ sb.auth.onAuthStateChange(
         session.user;
 
       await loadProfile();
+      await touchMemberActivity(true);
+      await updateForumPresence();
 
       await loadBoards();
 
@@ -4389,6 +4816,9 @@ sb.auth.onAuthStateChange(
 
       currentUser = null;
       currentProfile = null;
+      lastMemberActivityTouch = 0;
+
+      await updateForumPresence();
 
       $('#app').classList.remove(
         'visible'
@@ -5856,6 +6286,16 @@ function showBoardList(){
 
     <div id="boards-container"></div>
 
+    <section
+      class="forum-activity"
+      id="forum-activity"
+      aria-label="Forum member activity"
+    >
+      <div class="empty-state">
+        Loading member activity...
+      </div>
+    </section>
+
     ${
       currentProfile?.is_admin
         ? adminBoardsBlock()
@@ -5917,6 +6357,10 @@ function showBoardList(){
   if (currentProfile?.is_admin){
     wireAdminBoards();
   }
+
+  renderForumActivity().catch(error =>
+    console.error(error)
+  );
 }
 
 function adminBoardsBlock(){
@@ -8324,6 +8768,40 @@ async function transferVaultCurrency(type){
   $('#vault-balance').textContent =
     currentProfile.savings_currency;
 }
+
+/* ============================================================
+   LIVE FORUM ACTIVITY
+   ============================================================ */
+
+startForumPresence();
+
+document.addEventListener(
+  'visibilitychange',
+  () => {
+    if (!document.hidden){
+      touchMemberActivity();
+      updateForumPresence();
+    }
+  }
+);
+
+window.addEventListener(
+  'focus',
+  () => {
+    touchMemberActivity();
+    updateForumPresence();
+  }
+);
+
+setInterval(
+  () => {
+    if (!document.hidden){
+      touchMemberActivity();
+      updateForumPresence();
+    }
+  },
+  4 * 60 * 1000
+);
 
 </script>
 
