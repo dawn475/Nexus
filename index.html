@@ -258,6 +258,23 @@
     font-size:11px;
   }
 
+  .profile-identity-link,
+  .profile-link{
+    padding:0;
+    border:0;
+    background:none;
+    color:inherit;
+    font:inherit;
+    cursor:pointer;
+  }
+
+  .profile-identity-link:hover,
+  .profile-link:hover{
+    color:var(--accent-soft);
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+
   .username-pill b{
     color:var(--parchment);
     font-weight:500;
@@ -899,6 +916,11 @@
     text-transform:uppercase;
   }
 
+  .thread-state-badge.approved{
+    border-color:var(--success);
+    color:#9fc5aa;
+  }
+
   .thread-moderation{
     display:flex;
     align-items:center;
@@ -982,6 +1004,173 @@
     font-family:var(--display);
     font-size:17px;
     font-weight:600;
+  }
+
+  /* ---------- member profiles ---------- */
+
+  .profile-shell{
+    display:grid;
+    grid-template-columns:220px minmax(0, 1fr);
+    gap:24px;
+  }
+
+  .profile-card,
+  .profile-panel{
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius-large);
+    background:var(--panel);
+    box-shadow:var(--shadow-soft);
+  }
+
+  .profile-card{
+    padding:22px;
+    text-align:center;
+  }
+
+  .profile-avatar,
+  .profile-avatar-fallback{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:150px;
+    height:150px;
+    margin:0 auto 16px;
+    border:1px solid var(--line);
+    border-radius:50%;
+    background:var(--panel-raised);
+    object-fit:cover;
+  }
+
+  .profile-avatar-fallback{
+    color:var(--accent-soft);
+    font-family:var(--display);
+    font-size:58px;
+  }
+
+  .profile-card h2{
+    margin:0 0 5px;
+    color:var(--parchment);
+    font-family:var(--display);
+    font-size:28px;
+    font-weight:600;
+  }
+
+  .profile-joined{
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:9px;
+  }
+
+  .profile-panel{
+    min-width:0;
+    overflow:hidden;
+  }
+
+  .profile-tabs{
+    display:flex;
+    gap:4px;
+    padding:10px 12px 0;
+    border-bottom:1px solid var(--line-soft);
+  }
+
+  .profile-tab{
+    padding:10px 13px;
+    border:0;
+    border-bottom:2px solid transparent;
+    background:none;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+  }
+
+  .profile-tab.active{
+    border-bottom-color:var(--accent);
+    color:var(--accent-soft);
+  }
+
+  .profile-tab-content{
+    padding:24px;
+  }
+
+  .profile-bio{
+    margin:0;
+    color:var(--parchment-soft);
+    font-size:14px;
+    line-height:1.8;
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+  }
+
+  .profile-edit-form{
+    display:grid;
+    gap:14px;
+    margin-top:24px;
+    padding-top:20px;
+    border-top:1px solid var(--line-soft);
+  }
+
+  .profile-edit-form label{
+    display:grid;
+    gap:7px;
+    color:var(--muted-light);
+    font-size:11px;
+  }
+
+  .profile-edit-form input[type="file"]{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--void-soft);
+    color:var(--muted-light);
+  }
+
+  .profile-edit-form textarea{
+    min-height:150px;
+  }
+
+  .profile-form-foot{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+
+  .character-list{
+    display:grid;
+    gap:9px;
+  }
+
+  .character-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    width:100%;
+    padding:15px 16px;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius);
+    background:var(--panel-raised);
+    color:var(--parchment);
+    text-align:left;
+  }
+
+  .character-card:hover{
+    border-color:var(--accent);
+  }
+
+  .character-card strong{
+    font-family:var(--display);
+    font-size:19px;
+    font-weight:600;
+  }
+
+  .character-card span{
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:9px;
   }
 
   .post-time{
@@ -1616,6 +1805,27 @@
       font-size:16px;
     }
 
+    .profile-shell{
+      grid-template-columns:1fr;
+    }
+
+    .profile-card{
+      text-align:left;
+    }
+
+    .profile-avatar,
+    .profile-avatar-fallback{
+      width:110px;
+      height:110px;
+      margin-left:0;
+    }
+
+    .profile-form-foot,
+    .character-card{
+      align-items:stretch;
+      flex-direction:column;
+    }
+
     .board-card{
       padding:15px 16px;
     }
@@ -1860,6 +2070,10 @@
           <div class="menu-divider"></div>
           <div class="menu-section-label">Account</div>
 
+          <button class="dropdown-link" data-nav="profile" type="button">
+            Profile
+          </button>
+
           <button class="dropdown-link" data-nav="store" type="button">
             Market
           </button>
@@ -1881,7 +2095,11 @@
 
       <div class="username-pill">
         signed in as
-        <b id="username-display">—</b>
+        <button
+          class="profile-identity-link"
+          id="username-display"
+          type="button"
+        >—</button>
       </div>
 
       <button
@@ -2704,10 +2922,15 @@ $all('.dropdown-link[data-nav]').forEach(btn => {
   btn.addEventListener('click', () => {
     closeMenu();
 
+    if (btn.dataset.nav === 'profile') showProfile(currentUser.id);
     if (btn.dataset.nav === 'store') showStore();
     if (btn.dataset.nav === 'inventory') showInventory();
     if (btn.dataset.nav === 'vault') showVault();
   });
+});
+
+$('#username-display')?.addEventListener('click', () => {
+  showProfile(currentUser.id);
 });
 
 /* ============================================================
@@ -2956,6 +3179,428 @@ async function refreshCurrency(){
     $('#currency-display').textContent =
       currentProfile.currency;
   }
+}
+
+/* ============================================================
+   MEMBER PROFILES
+   ============================================================ */
+
+async function showProfile(
+  profileId,
+  activeTab = 'about'
+){
+
+  currentBoardId = null;
+
+  setActiveSidebar({
+    nav:
+      profileId === currentUser.id
+        ? 'profile'
+        : null
+  });
+
+  const [
+    profileResult,
+    charactersResult
+  ] = await Promise.all([
+    sb
+      .from('profiles')
+      .select(
+        'id, username, avatar_url, bio, created_at'
+      )
+      .eq('id', profileId)
+      .single(),
+    sb
+      .from('threads')
+      .select(
+        'id, title, board_id, character_approved_at, boards(name)'
+      )
+      .eq('author_id', profileId)
+      .eq('is_approved_character', true)
+      .order(
+        'character_approved_at',
+        { ascending:false }
+      )
+  ]);
+
+  if (profileResult.error || !profileResult.data){
+    showToast(
+      profileResult.error?.message ||
+      'Profile not found.'
+    );
+    return;
+  }
+
+  const profile =
+    profileResult.data;
+
+  const characters =
+    charactersResult.data || [];
+
+  const isOwner =
+    profile.id === currentUser.id;
+
+  const initial =
+    (profile.username || '?')
+      .trim()
+      .charAt(0)
+      .toUpperCase();
+
+  const joined =
+    profile.created_at
+      ? new Date(
+          profile.created_at
+        ).toLocaleDateString(
+          undefined,
+          {
+            month:'long',
+            year:'numeric'
+          }
+        )
+      : 'Unknown';
+
+  const aboutContent = `
+    <p class="profile-bio">
+      ${
+        profile.bio
+          ? esc(profile.bio)
+          : 'No bio has been added yet.'
+      }
+    </p>
+
+    ${
+      isOwner
+        ? `
+          <form
+            class="profile-edit-form"
+            id="profile-edit-form"
+          >
+            <label>
+              Bio
+              <textarea
+                id="profile-bio-input"
+                maxlength="2000"
+                placeholder="Tell the forum a little about yourself..."
+              >${esc(profile.bio || '')}</textarea>
+            </label>
+
+            <label>
+              Profile picture
+              <input
+                id="profile-avatar-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+              >
+            </label>
+
+            <div class="profile-form-foot">
+              <span class="hint">
+                JPG, PNG, WebP, or GIF · 2 MB maximum
+              </span>
+
+              <button
+                class="btn btn-gold"
+                id="profile-save"
+                type="submit"
+              >
+                Save Profile
+              </button>
+            </div>
+          </form>
+        `
+        : ''
+    }
+  `;
+
+  const charactersContent =
+    charactersResult.error
+      ? `<div class="empty-state">
+          Couldn't load approved characters.
+        </div>`
+      : characters.length
+        ? `<div class="character-list">
+            ${
+              characters
+                .map(character => `
+                  <button
+                    class="character-card"
+                    data-character-thread="${character.id}"
+                    data-character-board="${character.board_id}"
+                    type="button"
+                  >
+                    <strong>
+                      ${esc(character.title)}
+                    </strong>
+                    <span>
+                      ${esc(character.boards?.name || 'Character thread')}
+                    </span>
+                  </button>
+                `)
+                .join('')
+            }
+          </div>`
+        : `<div class="empty-state">
+            No approved characters yet.
+          </div>`;
+
+  setContent(`
+    <button
+      class="back-link"
+      id="profile-back"
+      type="button"
+    >
+      ← Back to boards
+    </button>
+
+    <div class="profile-shell">
+      <aside class="profile-card">
+        ${
+          profile.avatar_url
+            ? `<img
+                class="profile-avatar"
+                id="profile-avatar"
+                src="${esc(profile.avatar_url)}"
+                alt="${esc(profile.username)}'s profile picture"
+              >`
+            : `<div class="profile-avatar-fallback">
+                ${esc(initial)}
+              </div>`
+        }
+
+        <h2>${esc(profile.username)}</h2>
+        <div class="profile-joined">
+          Joined ${esc(joined)}
+        </div>
+      </aside>
+
+      <section class="profile-panel">
+        <div class="profile-tabs" role="tablist">
+          <button
+            class="profile-tab ${activeTab === 'about' ? 'active' : ''}"
+            data-profile-tab="about"
+            type="button"
+          >
+            Bio
+          </button>
+
+          <button
+            class="profile-tab ${activeTab === 'characters' ? 'active' : ''}"
+            data-profile-tab="characters"
+            type="button"
+          >
+            Characters (${characters.length})
+          </button>
+        </div>
+
+        <div class="profile-tab-content">
+          ${
+            activeTab === 'characters'
+              ? charactersContent
+              : aboutContent
+          }
+        </div>
+      </section>
+    </div>
+  `);
+
+  $('#profile-back')
+    .addEventListener(
+      'click',
+      showBoardList
+    );
+
+  $('#profile-avatar')
+    ?.addEventListener(
+      'error',
+      event => {
+        event.currentTarget
+          .replaceWith(
+            Object.assign(
+              document.createElement('div'),
+              {
+                className:
+                  'profile-avatar-fallback',
+                textContent:
+                  initial
+              }
+            )
+          );
+      }
+    );
+
+  $all('[data-profile-tab]')
+    .forEach(tab => {
+      tab.addEventListener(
+        'click',
+        () => showProfile(
+          profileId,
+          tab.dataset.profileTab
+        )
+      );
+    });
+
+  $all('[data-character-thread]')
+    .forEach(card => {
+      card.addEventListener(
+        'click',
+        () => {
+          currentBoardId =
+            Number(
+              card.dataset.characterBoard
+            );
+
+          showThread(
+            card.dataset.characterThread
+          );
+        }
+      );
+    });
+
+  $('#profile-edit-form')
+    ?.addEventListener(
+      'submit',
+      async event => {
+        event.preventDefault();
+
+        const bio =
+          $('#profile-bio-input')
+            .value
+            .trim();
+
+        const avatarFile =
+          $('#profile-avatar-input')
+            .files[0];
+
+        if (bio.length > 2000){
+          showToast(
+            'Bio must be 2,000 characters or fewer.'
+          );
+          return;
+        }
+
+        const allowedTypes = [
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'image/gif'
+        ];
+
+        if (
+          avatarFile &&
+          !allowedTypes.includes(
+            avatarFile.type
+          )
+        ){
+          showToast(
+            'Choose a JPG, PNG, WebP, or GIF image.'
+          );
+          return;
+        }
+
+        if (
+          avatarFile &&
+          avatarFile.size > 2097152
+        ){
+          showToast(
+            'Profile pictures must be 2 MB or smaller.'
+          );
+          return;
+        }
+
+        const saveButton =
+          $('#profile-save');
+
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+
+        let avatarUrl =
+          profile.avatar_url;
+
+        if (avatarFile){
+          const avatarPath =
+            `${currentUser.id}/avatar`;
+
+          const { error:uploadError } =
+            await sb.storage
+              .from('avatars')
+              .upload(
+                avatarPath,
+                avatarFile,
+                {
+                  cacheControl:'3600',
+                  contentType:
+                    avatarFile.type,
+                  upsert:true
+                }
+              );
+
+          if (uploadError){
+            saveButton.disabled = false;
+            saveButton.textContent =
+              'Save Profile';
+            showToast(
+              uploadError.message
+            );
+            return;
+          }
+
+          const { data:publicAvatar } =
+            sb.storage
+              .from('avatars')
+              .getPublicUrl(
+                avatarPath
+              );
+
+          avatarUrl =
+            `${publicAvatar.publicUrl}?v=${Date.now()}`;
+        }
+
+        const {
+          data:updatedProfile,
+          error:updateError
+        } = await sb
+          .from('profiles')
+          .update({
+            bio:
+              bio || null,
+            avatar_url:
+              avatarUrl || null
+          })
+          .eq(
+            'id',
+            currentUser.id
+          )
+          .select(
+            'bio, avatar_url'
+          )
+          .single();
+
+        if (updateError){
+          saveButton.disabled = false;
+          saveButton.textContent =
+            'Save Profile';
+          showToast(
+            updateError.message
+          );
+          return;
+        }
+
+        currentProfile.bio =
+          updatedProfile.bio;
+
+        currentProfile.avatar_url =
+          updatedProfile.avatar_url;
+
+        showToast(
+          'Profile saved.'
+        );
+
+        await showProfile(
+          currentUser.id,
+          'about'
+        );
+      }
+    );
 }
 
 /* ============================================================
@@ -3301,7 +3946,7 @@ async function showThreadList(boardId){
     await sb
       .from('threads')
       .select(
-        'id, title, pinned, locked, created_at, profiles(username)'
+        'id, title, author_id, pinned, locked, is_approved_character, created_at, author:profiles!threads_author_id_fkey(username)'
       )
       .eq(
         'board_id',
@@ -3368,6 +4013,12 @@ async function showThreadList(boardId){
                   : ''
               }
 
+              ${
+                t.is_approved_character
+                  ? '<span class="lock-badge" title="Approved character">✓</span>'
+                  : ''
+              }
+
               <span class="thread-title">
                 ${esc(t.title)}
               </span>
@@ -3375,10 +4026,16 @@ async function showThreadList(boardId){
             </div>
 
             <span class="thread-meta">
-              by ${esc(
-                t.profiles?.username ||
-                'unknown'
-              )}
+              by
+              <span
+                class="profile-link"
+                data-profile-id="${t.author_id}"
+                role="button"
+                tabindex="0"
+              >${esc(
+                  t.author?.username ||
+                  'unknown'
+                )}</span>
               ·
               ${timeAgo(
                 t.created_at
@@ -3389,6 +4046,34 @@ async function showThreadList(boardId){
         `
       )
       .join('');
+
+  $all('.thread-row [data-profile-id]')
+    .forEach(link => {
+      const openAuthorProfile = event => {
+        event.stopPropagation();
+        showProfile(
+          link.dataset.profileId
+        );
+      };
+
+      link.addEventListener(
+        'click',
+        openAuthorProfile
+      );
+
+      link.addEventListener(
+        'keydown',
+        event => {
+          if (
+            event.key === 'Enter' ||
+            event.key === ' '
+          ){
+            event.preventDefault();
+            openAuthorProfile(event);
+          }
+        }
+      );
+    });
 
   $all('.thread-row')
     .forEach(row => {
@@ -3560,7 +4245,7 @@ async function showThread(threadId){
     await sb
       .from('threads')
       .select(
-        'title, locked, board_id'
+        'title, locked, board_id, is_approved_character'
       )
       .eq(
         'id',
@@ -3619,6 +4304,12 @@ async function showThread(threadId){
           : ''
       }
 
+      ${
+        thread.is_approved_character
+          ? '<span class="thread-state-badge approved">Approved Character</span>'
+          : ''
+      }
+
     </div>
 
     ${
@@ -3652,6 +4343,17 @@ async function showThread(threadId){
                 thread.locked
                   ? 'Unlock Thread'
                   : 'Lock Thread'
+              }
+            </button>
+
+            <button
+              class="btn btn-ghost"
+              id="thread-character-toggle"
+            >
+              ${
+                thread.is_approved_character
+                  ? 'Remove Character Approval'
+                  : 'Approve Character'
               }
             </button>
 
@@ -3844,6 +4546,69 @@ async function showThread(threadId){
           );
         }
       );
+
+    $('#thread-character-toggle')
+      .addEventListener(
+        'click',
+        async () => {
+
+          const characterButton =
+            $('#thread-character-toggle');
+
+          characterButton.disabled =
+            true;
+
+          const approve =
+            !thread.is_approved_character;
+
+          const {
+            data:approvedThread,
+            error:approvalError
+          } = await sb
+            .from('threads')
+            .update({
+              is_approved_character:
+                approve,
+              character_approved_at:
+                approve
+                  ? new Date().toISOString()
+                  : null,
+              character_approved_by:
+                approve
+                  ? currentUser.id
+                  : null
+            })
+            .eq(
+              'id',
+              threadId
+            )
+            .select(
+              'is_approved_character'
+            )
+            .single();
+
+          if (approvalError){
+            characterButton.disabled =
+              false;
+
+            showToast(
+              approvalError.message
+            );
+
+            return;
+          }
+
+          showToast(
+            approvedThread.is_approved_character
+              ? 'Character approved and added to the member profile.'
+              : 'Character approval removed.'
+          );
+
+          await showThread(
+            threadId
+          );
+        }
+      );
   }
 
   $('#reply-submit')
@@ -3908,7 +4673,7 @@ async function loadPosts(threadId){
     await sb
       .from('posts')
       .select(
-        'id, content, created_at, profiles(username)'
+        'id, author_id, content, created_at, profiles(username)'
       )
       .eq(
         'thread_id',
@@ -3962,12 +4727,16 @@ async function loadPosts(threadId){
 
             <div class="post-head">
 
-              <span class="post-author">
+              <button
+                class="post-author profile-link"
+                data-profile-id="${p.author_id}"
+                type="button"
+              >
                 ${esc(
                   p.profiles?.username ||
                   'unknown'
                 )}
-              </span>
+              </button>
 
               <span class="post-time">
                 ${timeAgo(
@@ -4004,6 +4773,16 @@ async function loadPosts(threadId){
       }
     }
   );
+
+  $all('#posts-container [data-profile-id]')
+    .forEach(link => {
+      link.addEventListener(
+        'click',
+        () => showProfile(
+          link.dataset.profileId
+        )
+      );
+    });
 }
 
 /* ============================================================
