@@ -280,6 +280,29 @@
     font-weight:500;
   }
 
+  .admin-badge{
+    display:inline-flex;
+    align-items:center;
+    flex-shrink:0;
+    gap:4px;
+    padding:3px 7px;
+    border:1px solid rgba(181,154,112,.55);
+    border-radius:999px;
+    background:rgba(143,63,80,.16);
+    color:var(--gold-bright);
+    font-family:var(--mono);
+    font-size:8px;
+    font-weight:600;
+    letter-spacing:.55px;
+    line-height:1.2;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+
+  .admin-badge[hidden]{
+    display:none;
+  }
+
   /* ---------- theme toggle ---------- */
 
   .theme-toggle{
@@ -1004,6 +1027,23 @@
     font-family:var(--display);
     font-size:17px;
     font-weight:600;
+  }
+
+  .post-author-wrap,
+  .profile-name-row{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  .profile-name-row{
+    justify-content:center;
+    margin-bottom:5px;
+  }
+
+  .profile-name-row h2{
+    margin:0;
   }
 
   /* ---------- member profiles ---------- */
@@ -1813,6 +1853,10 @@
       text-align:left;
     }
 
+    .profile-name-row{
+      justify-content:flex-start;
+    }
+
     .profile-avatar,
     .profile-avatar-fallback{
       width:110px;
@@ -2100,6 +2144,11 @@
           id="username-display"
           type="button"
         >—</button>
+        <span
+          class="admin-badge"
+          id="signed-in-admin-badge"
+          hidden
+        >◆ Admin</span>
       </div>
 
       <button
@@ -3151,6 +3200,9 @@ async function loadProfile(){
   $('#username-display').textContent =
     data.username;
 
+  $('#signed-in-admin-badge').hidden =
+    data.is_admin !== true;
+
   $('#currency-display').textContent =
     data.currency ?? 0;
 }
@@ -3206,7 +3258,7 @@ async function showProfile(
     sb
       .from('profiles')
       .select(
-        'id, username, avatar_url, bio, created_at'
+        'id, username, avatar_url, bio, is_admin, created_at'
       )
       .eq('id', profileId)
       .single(),
@@ -3367,7 +3419,14 @@ async function showProfile(
               </div>`
         }
 
-        <h2>${esc(profile.username)}</h2>
+        <div class="profile-name-row">
+          <h2>${esc(profile.username)}</h2>
+          ${
+            profile.is_admin
+              ? '<span class="admin-badge">◆ Admin</span>'
+              : ''
+          }
+        </div>
         <div class="profile-joined">
           Joined ${esc(joined)}
         </div>
@@ -3946,7 +4005,7 @@ async function showThreadList(boardId){
     await sb
       .from('threads')
       .select(
-        'id, title, author_id, pinned, locked, is_approved_character, created_at, author:profiles!threads_author_id_fkey(username)'
+        'id, title, author_id, pinned, locked, is_approved_character, created_at, author:profiles!threads_author_id_fkey(username, is_admin)'
       )
       .eq(
         'board_id',
@@ -4036,6 +4095,11 @@ async function showThreadList(boardId){
                   t.author?.username ||
                   'unknown'
                 )}</span>
+              ${
+                t.author?.is_admin
+                  ? '<span class="admin-badge">◆ Admin</span>'
+                  : ''
+              }
               ·
               ${timeAgo(
                 t.created_at
@@ -4673,7 +4737,7 @@ async function loadPosts(threadId){
     await sb
       .from('posts')
       .select(
-        'id, author_id, content, created_at, profiles(username)'
+        'id, author_id, content, created_at, profiles(username, is_admin)'
       )
       .eq(
         'thread_id',
@@ -4727,16 +4791,24 @@ async function loadPosts(threadId){
 
             <div class="post-head">
 
-              <button
-                class="post-author profile-link"
-                data-profile-id="${p.author_id}"
-                type="button"
-              >
-                ${esc(
-                  p.profiles?.username ||
-                  'unknown'
-                )}
-              </button>
+              <div class="post-author-wrap">
+                <button
+                  class="post-author profile-link"
+                  data-profile-id="${p.author_id}"
+                  type="button"
+                >
+                  ${esc(
+                    p.profiles?.username ||
+                    'unknown'
+                  )}
+                </button>
+
+                ${
+                  p.profiles?.is_admin
+                    ? '<span class="admin-badge">◆ Admin</span>'
+                    : ''
+                }
+              </div>
 
               <span class="post-time">
                 ${timeAgo(
