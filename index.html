@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <script src="supabase.js" onerror="document.getElementById('fatal-error-banner').style.display='block'; document.getElementById('fatal-error-banner').textContent='supabase.js was not found. Make sure you uploaded it to the same folder as index.html, with that exact filename.';"></script>
+<script src="purify.min.js" onerror="document.getElementById('fatal-error-banner').style.display='block'; document.getElementById('fatal-error-banner').textContent='purify.min.js was not found. Custom post formatting has been disabled for safety.';"></script>
 
 <style>
   :root{
@@ -938,8 +939,43 @@
     font-size:14px;
 
     line-height:1.8;
+  }
 
+  .bbcode-content{
     white-space:pre-wrap;
+    overflow-wrap:anywhere;
+  }
+
+  .bbcode-content blockquote{
+    margin:14px 0;
+    padding:10px 14px;
+    border-left:2px solid var(--accent);
+    background:var(--void-soft);
+    color:var(--muted-light);
+  }
+
+  .bbcode-content a{
+    color:var(--accent-soft);
+    text-decoration:underline;
+    text-underline-offset:2px;
+  }
+
+  .bbcode-image{
+    display:block;
+    max-width:100%;
+    height:auto;
+    margin:12px auto;
+    border-radius:var(--radius);
+  }
+
+  .dohtml-frame{
+    display:block;
+    width:100%;
+    min-height:80px;
+    margin:12px 0;
+    border:0;
+    background:transparent;
+    overflow:hidden;
   }
 
   textarea,
@@ -1838,7 +1874,7 @@
 
       <textarea
         id="new-thread-content"
-        placeholder="Write the opening post..."
+        placeholder="Write the opening post... BBCode and [dohtml] templates are supported."
       ></textarea>
 
     </div>
@@ -2057,6 +2093,448 @@ function esc(str){
     str ?? '';
 
   return d.innerHTML;
+}
+
+const doHtmlFrames = new Map();
+
+window.addEventListener(
+  'message',
+  event => {
+
+    const message = event.data;
+
+    if (
+      !message ||
+      message.type !== 'nexus-dohtml-resize' ||
+      typeof message.id !== 'string'
+    ){
+      return;
+    }
+
+    const frame =
+      doHtmlFrames.get(message.id);
+
+    if (
+      !frame ||
+      event.source !== frame.contentWindow
+    ){
+      return;
+    }
+
+    const height =
+      Math.max(
+        80,
+        Math.min(
+          5000,
+          Number(message.height) || 0
+        )
+      );
+
+    frame.style.height =
+      height + 'px';
+  }
+);
+
+function safePostUrl(value, imageOnly = false){
+
+  const decoder =
+    document.createElement('textarea');
+
+  decoder.innerHTML =
+    value ?? '';
+
+  const url =
+    decoder.value.trim();
+
+  if (/^https?:\/\//i.test(url)){
+    return url;
+  }
+
+  if (!imageOnly && /^mailto:/i.test(url)){
+    return url;
+  }
+
+  if (/^(?:\.\/|\.\.\/|\/)[^\s]*$/.test(url)){
+    return url;
+  }
+
+  return '';
+}
+
+function applyBbCode(html){
+
+  const pairedTags = [
+    [/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>'],
+    [/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>'],
+    [/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>'],
+    [/\[s\]([\s\S]*?)\[\/s\]/gi, '<s>$1</s>'],
+    [/\[center\]([\s\S]*?)\[\/center\]/gi, '<div style="text-align:center">$1</div>'],
+    [/\[left\]([\s\S]*?)\[\/left\]/gi, '<div style="text-align:left">$1</div>'],
+    [/\[right\]([\s\S]*?)\[\/right\]/gi, '<div style="text-align:right">$1</div>'],
+    [/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote>$1</blockquote>'],
+    [/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre><code>$1</code></pre>']
+  ];
+
+  for (let pass = 0; pass < 5; pass += 1){
+
+    let changed = false;
+
+    pairedTags.forEach(
+      ([pattern, replacement]) => {
+
+        const next =
+          html.replace(
+            pattern,
+            replacement
+          );
+
+        if (next !== html){
+          changed = true;
+          html = next;
+        }
+      }
+    );
+
+    if (!changed){
+      break;
+    }
+  }
+
+  html = html.replace(
+    /\[color=([^\]\r\n]+)\]([\s\S]*?)\[\/color\]/gi,
+    (match, color, body) => {
+
+      const safeColor =
+        color.trim();
+
+      if (
+        !/^(?:#[0-9a-f]{3,8}|[a-z]{1,20}|(?:rgb|hsl)a?\([0-9.,%\s]+\))$/i
+          .test(safeColor)
+      ){
+        return body;
+      }
+
+      return `<span style="color:${esc(safeColor)}">${body}</span>`;
+    }
+  );
+
+  html = html.replace(
+    /\[size=([1-7])\]([\s\S]*?)\[\/size\]/gi,
+    (match, size, body) => {
+
+      const sizes = {
+        1:'.72em',
+        2:'.86em',
+        3:'1em',
+        4:'1.14em',
+        5:'1.3em',
+        6:'1.5em',
+        7:'1.75em'
+      };
+
+      return `<span style="font-size:${sizes[size]}">${body}</span>`;
+    }
+  );
+
+  html = html.replace(
+    /\[url=([^\]\r\n]+)\]([\s\S]*?)\[\/url\]/gi,
+    (match, value, label) => {
+
+      const url =
+        safePostUrl(value);
+
+      if (!url){
+        return label;
+      }
+
+      return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    }
+  );
+
+  html = html.replace(
+    /\[url\]([^\[\r\n]+)\[\/url\]/gi,
+    (match, value) => {
+
+      const url =
+        safePostUrl(value);
+
+      if (!url){
+        return value;
+      }
+
+      return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`;
+    }
+  );
+
+  html = html.replace(
+    /\[img\]([^\[\r\n]+)\[\/img\]/gi,
+    (match, value) => {
+
+      const url =
+        safePostUrl(value, true);
+
+      if (!url){
+        return '';
+      }
+
+      return `<img class="bbcode-image" src="${esc(url)}" alt="User-posted image" loading="lazy">`;
+    }
+  );
+
+  return html;
+}
+
+function sanitizePostHtml(html, doHtml = false){
+
+  if (!window.DOMPurify){
+    return esc(html);
+  }
+
+  const config = {
+    USE_PROFILES:{
+      html:true
+    },
+    ALLOW_DATA_ATTR:true,
+    ALLOW_ARIA_ATTR:true,
+    ALLOW_UNKNOWN_PROTOCOLS:false,
+    FORBID_TAGS:[
+      'script',
+      'iframe',
+      'object',
+      'embed',
+      'form',
+      'button',
+      'textarea',
+      'select',
+      'option',
+      'meta',
+      'base',
+      'link',
+      'svg',
+      'math'
+    ],
+    FORBID_ATTR:[
+      'action',
+      'formaction',
+      'srcdoc',
+      'sandbox',
+      'download',
+      'autofocus'
+    ]
+  };
+
+  if (!doHtml){
+    config.FORBID_TAGS.push(
+      'style',
+      'input'
+    );
+  } else {
+    config.FORCE_BODY = true;
+  }
+
+  return DOMPurify.sanitize(
+    html,
+    config
+  );
+}
+
+function renderBbCode(source){
+
+  return sanitizePostHtml(
+    applyBbCode(
+      esc(source)
+    )
+  );
+}
+
+function prepareDoHtml(source){
+
+  let html =
+    String(source ?? '')
+      .replace(
+        /\\(?=<\/?[a-z!])/gi,
+        ''
+      )
+      .replace(
+        /\[(https?:\/\/[^\]\s]+)\]\(\1\)/gi,
+        '$1'
+      );
+
+  html =
+    applyBbCode(html);
+
+  return sanitizePostHtml(
+    html,
+    true
+  );
+}
+
+function buildDoHtmlDocument(source, frameId){
+
+  const content =
+    prepareDoHtml(source);
+
+  const resizeScript = `
+    (() => {
+      const frameId = ${JSON.stringify(frameId)};
+      const sendHeight = () => {
+        const height = Math.max(
+          document.documentElement.scrollHeight,
+          document.body ? document.body.scrollHeight : 0
+        );
+        parent.postMessage({
+          type:'nexus-dohtml-resize',
+          id:frameId,
+          height:height + 4
+        }, '*');
+      };
+      addEventListener('load', sendHeight);
+      new ResizeObserver(sendHeight).observe(document.documentElement);
+      new MutationObserver(sendHeight).observe(document.documentElement, {
+        childList:true,
+        subtree:true,
+        attributes:true
+      });
+      sendHeight();
+    })();
+  `;
+
+  return `<!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          html,body{margin:0;padding:0;min-width:0;background:transparent;}
+          *,*::before,*::after{box-sizing:border-box;}
+          img{max-width:100%;}
+        </style>
+      </head>
+      <body>
+        ${content}
+        <script>${resizeScript}<\/script>
+      </body>
+    </html>`;
+}
+
+function createDoHtmlFrame(source, postId, blockIndex){
+
+  const frameId =
+    `dohtml-${postId}-${blockIndex}`;
+
+  const frame =
+    document.createElement('iframe');
+
+  frame.className =
+    'dohtml-frame';
+
+  frame.dataset.dohtmlFrameId =
+    frameId;
+
+  frame.title =
+    'Custom formatted post content';
+
+  frame.setAttribute(
+    'sandbox',
+    'allow-scripts'
+  );
+
+  frame.setAttribute(
+    'referrerpolicy',
+    'no-referrer'
+  );
+
+  doHtmlFrames.set(
+    frameId,
+    frame
+  );
+
+  frame.srcdoc =
+    buildDoHtmlDocument(
+      source,
+      frameId
+    );
+
+  return frame;
+}
+
+function renderPostContent(element, source, postId){
+
+  const content =
+    String(source ?? '');
+
+  const fragment =
+    document.createDocumentFragment();
+
+  const doHtmlPattern =
+    /\[dohtml\]([\s\S]*?)\[\/dohtml\]/gi;
+
+  let cursor = 0;
+  let blockIndex = 0;
+  let match;
+
+  while (
+    (
+      match =
+        doHtmlPattern.exec(content)
+    ) !== null
+  ){
+
+    if (match.index > cursor){
+
+      const text =
+        document.createElement('div');
+
+      text.className =
+        'bbcode-content';
+
+      text.innerHTML =
+        renderBbCode(
+          content.slice(
+            cursor,
+            match.index
+          )
+        );
+
+      fragment.append(text);
+    }
+
+    fragment.append(
+      createDoHtmlFrame(
+        match[1],
+        postId,
+        blockIndex
+      )
+    );
+
+    blockIndex += 1;
+    cursor =
+      match.index +
+      match[0].length;
+  }
+
+  if (
+    cursor < content.length ||
+    blockIndex === 0
+  ){
+
+    const text =
+      document.createElement('div');
+
+    text.className =
+      'bbcode-content';
+
+    text.innerHTML =
+      renderBbCode(
+        content.slice(cursor)
+      );
+
+    fragment.append(text);
+  }
+
+  element.replaceChildren(
+    fragment
+  );
 }
 
 function timeAgo(iso){
@@ -2996,13 +3474,13 @@ async function showThread(threadId){
 
       <textarea
         id="reply-box"
-        placeholder="Write your reply..."
+        placeholder="Write your reply... BBCode and [dohtml] templates are supported."
       ></textarea>
 
       <div class="composer-foot">
 
         <span class="hint">
-          Posts under 15 characters don't earn coin.
+          BBCode and [dohtml] templates are supported. Posts under 15 characters don't earn coin.
         </span>
 
         <button
@@ -3140,10 +3618,30 @@ async function loadPosts(threadId){
     return;
   }
 
+  container
+    .querySelectorAll(
+      '.dohtml-frame[data-dohtml-frame-id]'
+    )
+    .forEach(
+      frame =>
+        doHtmlFrames.delete(
+          frame.dataset.dohtmlFrameId
+        )
+    );
+
+  for (
+    const [frameId, frame]
+    of doHtmlFrames
+  ){
+    if (!frame.isConnected){
+      doHtmlFrames.delete(frameId);
+    }
+  }
+
   container.innerHTML =
     data
       .map(
-        p => `
+        (p, index) => `
           <div class="post-card">
 
             <div class="post-head">
@@ -3163,16 +3661,33 @@ async function loadPosts(threadId){
 
             </div>
 
-            <div class="post-body">
-              ${esc(
-                p.content
-              )}
-            </div>
+            <div
+              class="post-body"
+              data-post-index="${index}"
+            ></div>
 
           </div>
         `
       )
       .join('');
+
+  data.forEach(
+    (post, index) => {
+
+      const postBody =
+        container.querySelector(
+          `[data-post-index="${index}"]`
+        );
+
+      if (postBody){
+        renderPostContent(
+          postBody,
+          post.content,
+          post.id
+        );
+      }
+    }
+  );
 }
 
 /* ============================================================
